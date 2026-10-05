@@ -203,12 +203,25 @@ SID9="99999999-1111-2222-3333-444444444444"
 git -C "$R9" worktree add -q "$R9/.worktrees/w" -b "build/w-$SID9" HEAD
 printf 'line1\nline2\nW_added\n' > "$R9/.worktrees/w/app.php"; git -C "$R9/.worktrees/w" commit -qam w
 writes_log "$R9" "$SID9" "app.php"
-# Simulate a crashed session that left the mkdir-mutex held, with an OLD mtime (> LOCK_STALE 600s)
-mkdir -p "$R9/.worktrees/.merge-lock.d"; printf 'deadbeef 12345 1\n' > "$R9/.worktrees/.merge-lock.d/owner"
-touch -t 202001010000 "$R9/.worktrees/.merge-lock.d"   # ancient → stale
+# Simulate a crashed session's leftover lock, with an OLD mtime (> LOCK_STALE 600s). merge-back uses
+# flock where it exists (Linux) and an mkdir mutex elsewhere (macOS); plant the state its path reads.
+if command -v flock >/dev/null 2>&1; then
+  : > "$R9/.worktrees/.merge-lock"; touch -t 202001010000 "$R9/.worktrees/.merge-lock"
+else
+  mkdir -p "$R9/.worktrees/.merge-lock.d"; printf 'deadbeef 12345 1\n' > "$R9/.worktrees/.merge-lock.d/owner"
+  touch -t 202001010000 "$R9/.worktrees/.merge-lock.d"   # ancient → stale
+fi
 cd "$R9"
+_t9_start=$(date +%s)
 MB_OUT=$(V_TMP_DIR="$R9/.v/tmp" REPO_ROOT="$R9" bash "$MB" "$SID9" "$R9/.worktrees/w" 2>&1)
-echo "$MB_OUT" | grep -qi 'stale merge-lock' && ok "stale merge-lock detected + stolen" || { no "should detect+steal stale lock"; echo "$MB_OUT" | tail -3; }
+if command -v flock >/dev/null 2>&1; then
+  # The kernel releases a dead holder's flock, so there is nothing to steal: the merge must simply not
+  # wait out the 120s lock timeout.
+  [ $(( $(date +%s) - _t9_start )) -lt 60 ] && ok "stale flock lock file did not block the merge (flock path)" \
+    || { no "should not wait on a stale flock lock file"; echo "$MB_OUT" | tail -3; }
+else
+  echo "$MB_OUT" | grep -qi 'stale merge-lock' && ok "stale merge-lock detected + stolen" || { no "should detect+steal stale lock"; echo "$MB_OUT" | tail -3; }
+fi
 grep -q "W_added" "$R9/app.php" 2>/dev/null && ok "merge proceeded after stealing stale lock" || no "merge should proceed once stale lock stolen"
 
 echo ""

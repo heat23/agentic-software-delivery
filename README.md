@@ -418,9 +418,10 @@ checks passed: 3236   skipped: 3   failing files: 0   known issues: 1
 - **checks passed** counts the test assertions plus the 8 mutation guards. The total differs slightly
   by platform, because the one known-issue file passes a different number of checks on each.
 - **skipped** assertions need inputs that aren't in this snapshot, such as a pre-fix backup.
-- **known issues: 1** is a test with failing cases that isn't fixed yet: re-attaching to a detached
-  dispatch after its helper is killed. It's listed in [`known-issues.txt`](scripts/known-issues.txt)
-  with the most checks allowed to fail on each platform; one more counts as a real failure.
+- **known issues** counts listed tests that failed within their allowed bound. Two are open:
+  re-attaching to a detached dispatch after its helper is killed, and one timing-sensitive case in the
+  pack runner's watchdog test on macOS. [`known-issues.txt`](scripts/known-issues.txt) sets the most
+  checks allowed to fail on each platform; one more counts as a real failure.
 
 The runner copies the repository into a scratch `$HOME` and clears your Claude Code settings from the
 environment, so nothing on your machine is touched. Use it rather than running a test file directly:

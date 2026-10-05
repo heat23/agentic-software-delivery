@@ -315,9 +315,10 @@ below, and the list is not exhaustive.
   `~/.local/bin/run-v-packs` in the live setup, ships under `bin/`.
 - **Tests:** run them with `bash scripts/run-tests.sh`, which copies the repository into a scratch
   `$HOME` first and clears the caller's Claude Code settings. It needs `bash`, `git`, `jq`, `python3`,
-  `openssl`, `perl` and `shasum`. One test file, `v-dispatch-subagent-reattach-test.sh`, still has failing cases without a fix:
-  14 checks fail every time under stock bash 3.2, and with GNU tools a few timing-sensitive ones fail
-  under load. [`scripts/known-issues.txt`](scripts/known-issues.txt) records the most checks allowed to
+  `openssl`, `perl` and `shasum`. Two test files still have failing cases without a fix. In
+  `v-dispatch-subagent-reattach-test.sh`, 14 checks fail every time under stock bash 3.2, and with GNU
+  tools a few timing-sensitive ones fail under load. In `run-v-packs-watchdog-test.sh`, one case fails
+  intermittently on the macOS CI runner. [`scripts/known-issues.txt`](scripts/known-issues.txt) records the most checks allowed to
   fail on each platform, and the runner reports the file as `KNOWN` only within that bound. A test file that skips entirely counts as a
   failure, since the runner supplies every file it needs; a skip because an optional tool such as PHP
   isn't installed is reported instead.
