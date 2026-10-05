@@ -30,7 +30,7 @@ without my sign-off.
   and more than 3,200 automated checks in 252 test files, run in CI on macOS, Ubuntu and Debian. For 8
   guards, a mutation test injects the bug the guard exists for and confirms the tests catch it.
 - **Check it yourself:** `bash scripts/run-tests.sh` runs everything in a scratch home directory in
-  about ten minutes ([details](#run-it-about-ten-minutes)).
+  about 20 minutes ([details](#run-it-about-20-minutes)).
 
 <table>
 <tr>
@@ -401,7 +401,7 @@ With more time:
 | Threat model, OWASP mapping and known limits | [`docs/AI-SECURITY.md`](docs/AI-SECURITY.md) |
 | The rules the agents run under | [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md) |
 
-### Run it (about ten minutes)
+### Run it (about 20 minutes)
 
 ```bash
 git clone https://github.com/heat23/ai-engineering-org.git
@@ -409,19 +409,23 @@ cd ai-engineering-org
 bash scripts/run-tests.sh
 ```
 
-Expected final line on stock macOS:
+A passing run ends with `failing files: 0`. On the macOS CI runner (stock bash 3.2, no PHP
+installed) the final line read:
 
 ```text
-checks passed: 3236   skipped: 3   failing files: 0   known issues: 1
+checks passed: 3230   skipped: 3   failing files: 0   known issues: 1   skipped files (tool not installed): 1   stale known-issue entries: 1
 ```
 
 - **checks passed** counts the test assertions plus the 8 mutation guards. The total differs slightly
-  by platform, because the one known-issue file passes a different number of checks on each.
+  by platform, because the known-issue tests pass a different number of checks on each.
 - **skipped** assertions need inputs that aren't in this snapshot, such as a pre-fix backup.
 - **known issues** counts listed tests that failed within their allowed bound. Two are open:
   re-attaching to a detached dispatch after its helper is killed, and one timing-sensitive case in the
   pack runner's watchdog test on macOS. [`known-issues.txt`](scripts/known-issues.txt) sets the most
   checks allowed to fail on each platform; one more counts as a real failure.
+- **skipped files** are test files that need an optional tool that isn't installed, here PHP.
+- **stale known-issue entries** are listed tests that passed on this run; the timing-sensitive ones
+  pass on some runs and not others.
 
 The runner copies the repository into a scratch `$HOME` and clears your Claude Code settings from the
 environment, so nothing on your machine is touched. Use it rather than running a test file directly:

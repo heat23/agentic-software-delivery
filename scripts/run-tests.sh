@@ -52,7 +52,7 @@ _known_count(){ [ -f "$ROOT/scripts/known-issues.txt" ] || return 0
   awk -v t="$1" -v plat=" $_plat " '$1 == t && index(plat, " " $2 " ") { print $3; exit }' "$ROOT/scripts/known-issues.txt"; }
 _select(){ if [ "$#" -eq 0 ]; then cat; else local a; local pats=(); for a in "$@"; do pats+=(-e "$a"); done; grep -F "${pats[@]}"; fi; }
 
-if [ "$#" -eq 0 ]; then echo "Running the shipped tests in a scratch \$HOME (about ten minutes)..."
+if [ "$#" -eq 0 ]; then echo "Running the shipped tests in a scratch \$HOME (about 20 minutes)..."
 else echo "Running the shipped tests whose path contains: $*"; fi
 while IFS= read -r t; do
   ran=$((ran + 1))
