@@ -26,8 +26,8 @@ without my sign-off.
   enforced in code, not requested in prompts. "Done" needs evidence. Review is independent and adversarial, including of
   my own work: when I ran my cost analysis through a review panel, it caught me double-counting spend.
   When the data disagreed with my design, I changed the design.
-- **The evidence:** a measured record of 645 agent sessions, including where the controls fell short,
-  and more than 3,200 automated checks in 252 test files, run in CI on macOS, Ubuntu and Debian. For 8
+- **The evidence:** a measured record of 645 agent sessions, drawn from a log the system writes for
+  every session, including where the controls fell short, and more than 3,200 automated checks in 252 test files, run in CI on macOS, Ubuntu and Debian. For 8
   guards, a mutation test injects the bug the guard exists for and confirms the tests catch it.
 - **Check it yourself:** `bash scripts/run-tests.sh` runs everything in a scratch home directory in
   about 20 minutes ([details](#run-it-about-20-minutes)).
@@ -61,6 +61,7 @@ without my sign-off.
 | Audit trail | A dispatch log (unsigned) and HMAC-signed attestation |
 | Least-privilege access | Write tools denied to gate runners; runner exemptions bound to an HMAC token |
 | FinOps | Model tiering at dispatch, plus billed-cost telemetry |
+| Operational reviews | A structured log for every session, cost and time tracing, and read-only post-mortems whose findings become the next plan or a new guard ([details](#how-the-system-measures-itself)) |
 | Postmortems | Incident → guard → test; for 8 guards, a mutation test proves the test still catches the bug |
 
 **What would change at team scale:**
@@ -136,6 +137,31 @@ finish, with 545 blocks in total.
 - **Review ground truth:** "upheld" means a majority of the panel kept a finding: models judging
   models, not a human confirming a defect.
 - **Generality:** every measurement comes from one operator's workload.
+
+## How the system measures itself
+
+Every number in [Results](#results) comes from the system's own records, not from memory.
+
+- **A log for every session.** Each orchestrated session writes a structured session log: commits
+  added, files changed, start and end commits, duration, turn count, model, token use by model, and
+  whether the result matched the request. A session that ends without a valid log leaves a marker,
+  and a Stop hook appends every attempt to finish to an append-only log, so gaps in the record show
+  up instead of disappearing.
+- **Cost and time tracing.** Token counts are deduplicated by message ID before they are summed,
+  because streamed records repeat them. Billed cost is tallied per agent, sub-agents included, and
+  reviewer and gate-runner dispatches record their own cost in the dispatch log. Per-operation
+  telemetry shows where the wall-clock time and the expensive tokens went, tool call by tool call.
+- **Post-mortems that feed the next plan.** `/v-forensics` reconstructs recent sessions from git
+  history and these logs: what was claimed, what actually landed, which gates fired and what it
+  cost. `/v-self-audit` audits the orchestrator itself. Their findings become the next plan or a new
+  guard, and the cost analysis in [Results](#results) was built on these records.
+
+| To see… | Open |
+|---|---|
+| Token extraction and deduplication | [`v-extract-tokens.py`](skills/v-session-log/references/v-extract-tokens.py) |
+| Cost by agent, and per-operation time and tokens | [`cost-tally.py`](skills/v/references/cost-tally.py), [`v-op-telemetry.py`](skills/v/references/v-op-telemetry.py) |
+| The append-only record of every attempt to finish | [`abandonment-telemetry.sh`](hooks/abandonment-telemetry.sh) |
+| The post-mortem | [`skills/v-forensics/SKILL.md`](skills/v-forensics/SKILL.md) |
 
 ## Incidents that became guards
 
@@ -367,6 +393,7 @@ scripts; [`settings.headless.json`](settings.headless.json) covers headless runn
 ### Read it
 
 **Evaluating how I lead (about five minutes):** [Results](#results),
+[How the system measures itself](#how-the-system-measures-itself),
 [Incidents that became guards](#incidents-that-became-guards), [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md)
 and the [known limits](docs/AI-SECURITY.md#known-limits).
 
@@ -507,6 +534,9 @@ artifacts.
   - `skills/v/`: the orchestrator's specification and its scripts.
   - `skills/v-*/`: the 33 lifecycle skills listed in [the lifecycle table](#the-lifecycle-skill-by-skill),
     with shared conventions in `skills/_v-*.md` and shared references in `skills/references/`.
+    `skills/v-session-log/` is not a 34th skill: it holds the token extractor that the telemetry
+    scripts share. The session-log skill that writes each session's log runs in the live setup but
+    isn't part of this snapshot.
   - `bin/`: the pack runner (`run-v-packs`, installed as `~/.local/bin/run-v-packs`) and its library.
   - `hooks/` and `hooks/lib/`: enforcement and shared validators, wired by [`settings.json`](settings.json).
   - `agents/`: the 12 agent definitions: 8 reviewers, 2 gate runners, an auditor and a workflow verifier.
