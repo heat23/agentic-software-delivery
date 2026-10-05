@@ -161,7 +161,8 @@ _headless_has_trusted_attestation() {
   attestation_file=$(_headless_attestation_path "$sid" 2>/dev/null || true)
   [[ -n "$attestation_file" ]] || return 1
 
-  # Verify basic fields
+  # Verify basic fields. Non-empty first: jq 1.6 exits 0 for `-e` on empty input.
+  [[ -s "$attestation_file" ]] || return 1
   jq -e \
     --arg sid "$sid" \
     '(.session_id // "") == $sid and (.trusted_runner // false) == true' \

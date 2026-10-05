@@ -9,8 +9,9 @@
 #   bash scripts/run-tests.sh run-v-packs-exit-code hooks/   (only tests whose path contains an argument)
 #
 # Verdicts: PASS; FAIL; KNOWN (listed in scripts/known-issues.txt for this platform, failing no more
-# than the listed number of checks); SKIP (the whole file skipped, which counts as a failure here: the
-# runner provides every input a shipped test needs, so a file that skips means something is missing).
+# than the listed number of checks); SKIP (the whole file skipped because an optional tool such as php
+# isn't installed: reported, not a failure). A file that skips for any other reason, such as a missing
+# script, counts as a failure: the runner provides every file a shipped test needs.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRATCH="$(mktemp -d)"; trap 'rm -rf "$SCRATCH"' EXIT
@@ -42,7 +43,7 @@ printf '[init]\n\tdefaultBranch = main\n' > "$SCRATCH/.gitconfig-tests"
 UNSETS=()
 for v in $(env | awk -F= '/^(CLAUDE|V_)[A-Za-z0-9_]*=/ { print $1 }'); do UNSETS+=(-u "$v"); done
 
-failed=0; passed_total=0; skipped_total=0; known=0; stale=0; ran=0
+failed=0; passed_total=0; skipped_total=0; known=0; stale=0; ran=0; skipped_files=0
 # Platform tags for scripts/known-issues.txt: bash3 = bash 3.x is the shell running the tests; linux = GNU stat.
 _plat="any"; bash -c '[ "${BASH_VERSINFO[0]}" -eq 3 ]' 2>/dev/null && _plat="$_plat bash3"
 stat -c %Y / >/dev/null 2>&1 && _plat="$_plat linux"
@@ -63,7 +64,11 @@ while IFS= read -r t; do
   summary="$(printf '%s\n' "$out" | grep -E '[0-9]+ passed' | tail -1 | sed -E 's/[═ ]+$//; s/^[═ ]+//')"
   verdict=PASS; [ $rc -eq 0 ] || verdict=FAIL
   if [ $rc -eq 0 ] && [ -z "$summary" ] && printf '%s\n' "$out" | grep -q '^SKIP'; then
-    verdict=SKIP; rc=1; summary="$(printf '%s\n' "$out" | grep '^SKIP' | head -1 | sed "s#$SCRATCH#~#g")"
+    summary="$(printf '%s\n' "$out" | grep '^SKIP' | head -1 | sed "s#$SCRATCH#~#g")"
+    # A bare tool name ("SKIP: git", "SKIP: 'php' not available") is a missing optional tool.
+    if printf '%s\n' "$summary" | grep -qE "^SKIP:? '?[A-Za-z0-9_.+-]+'?( (unavailable|not available|absent|not installed))?\$"; then
+      verdict=SKIP; skipped_files=$((skipped_files + 1))
+    else verdict=SKIP; rc=1; fi
   fi
   exp="$(_known_count "$t")"
   if [ -n "$exp" ] && [ "$verdict" != SKIP ]; then
@@ -77,13 +82,16 @@ while IFS= read -r t; do
   s=$(printf '%s' "$summary" | sed -nE 's/(^|.*[^0-9])([0-9]+) skipped.*/\2/p'); skipped_total=$((skipped_total + ${s:-0}))
   if [ "$rc" -ne 0 ]; then
     failed=$((failed + 1))
-    printf '%s\n' "$out" | tail -15 | sed 's/^/      | /'   # show why, instead of hiding it
+    # show why, instead of hiding it: every failure line, then the end of the output
+    printf '%s\n' "$out" | grep -E '^[[:space:]]*(FAIL|NO|not ok|ERROR|FATAL)([[:space:]:]|$)' | head -25 | sed 's/^/      ! /'
+    printf '%s\n' "$out" | tail -10 | sed 's/^/      | /'
   fi
 done < <(cd "$SCRATCH/.claude" && { find . -name '*-test.sh' | sed 's#^\./##' | sort; echo scripts/mutation-gate.sh; } | _select "$@")
 
 [ "$ran" -gt 0 ] || { echo "no test path contains: $*" >&2; exit 2; }
 echo
 line="checks passed: $passed_total   skipped: $skipped_total   failing files: $failed   known issues: $known"
+[ "$skipped_files" -eq 0 ] || line="$line   skipped files (tool not installed): $skipped_files"
 [ "$stale" -eq 0 ] || line="$line   stale known-issue entries: $stale"
 echo "$line"
 exit $((failed > 0))

@@ -56,6 +56,29 @@ run_emit() {
 
 echo "== F7 :: pre-dispatch stack gate =="
 
+# F7 runs the gates under GNU `timeout`, which stock macOS doesn't ship; without it F7 deliberately
+# falls back to a normal dispatch. T0 checks that fallback. The remaining cases need the gates to run,
+# so on such a system they get a minimal stand-in (`timeout SECONDS CMD...`, exit 124 on expiry).
+if ! command -v timeout >/dev/null 2>&1; then
+  R0="$TD/t0"; mkrepo "$R0"
+  rc=$(run_emit "$EMIT" "$R0")
+  { [ "$rc" = "0" ] && grep -q "'timeout' unavailable" "$TD/err.txt" 2>/dev/null; } \
+    && ok "T0 no timeout on PATH -> F7 refuses to run the gates unbounded and dispatches normally (fail-closed)" \
+    || no "T0 expected the fail-closed fallback without timeout, got rc='$rc' (stderr: $(head -2 "$TD/err.txt" | tr '\n' ' '))"
+  mkdir -p "$TD/tbin"
+  cat > "$TD/tbin/timeout" <<'PERL'
+#!/usr/bin/perl
+my $secs = shift @ARGV; $secs =~ s/s$//;
+my $pid = fork(); die "fork: $!" unless defined $pid;
+if ($pid == 0) { exec @ARGV or exit 127; }
+$SIG{ALRM} = sub { kill 'TERM', $pid; waitpid($pid, 0); exit 124; };
+alarm $secs;
+waitpid($pid, 0);
+exit($? >> 8);
+PERL
+  chmod +x "$TD/tbin/timeout"; PATH="$TD/tbin:$PATH"; export PATH
+fi
+
 # ── A. stackless tree -> NO dispatch, mechanical report, reason recorded ────────────────
 R="$TD/a"; mkrepo "$R"
 rc=$(run_emit "$EMIT" "$R")
@@ -270,9 +293,19 @@ if [ -f "$GS" ]; then
   grep -qE '^[A-Z_]+_RC=' "$GS" && [ -z "$(grep -E '^[A-Z_]+_RC=' "$GS" | grep -v '=SKIP$' | head -1)" ] \
     && ok "H5b every *_RC in the summary is SKIP (W-NOGATE condition 1)" \
     || no "H5b summary carries a non-SKIP gate result"
-  grep -q '^PHASES_TOTAL_WALLCLOCK_SEC=0$' "$GS" \
-    && ok "H5c PHASES_TOTAL_WALLCLOCK_SEC=0 (W-NOGATE condition 2)" \
-    || no "H5c wallclock is not 0"
+  # The phase timers count whole seconds, so an all-SKIP run that straddles a second boundary on a
+  # loaded machine reports 1 (W-NOGATE then fails closed and re-demands PRE_FLIGHT, which is safe).
+  # One retry in a fresh tree, with a fresh session, tells that timing artifact from a real regression.
+  if grep -q '^PHASES_TOTAL_WALLCLOCK_SEC=0$' "$GS"; then
+    ok "H5c PHASES_TOTAL_WALLCLOCK_SEC=0 (W-NOGATE condition 2)"
+  else
+    HDEC2="$TD/h-decoy-retry"; mkrepo "$HDEC2"; SIDH2="aaaa0000-1111-4111-8111-00000000000e"
+    ( cd "$HDEC2" && env -u MODE -u WORKFLOW -u DIRTY_COUNT CLAUDE_SESSION_ID="$SIDH2" SESSION_ID="$SIDH2" \
+        PROJECT_ROOT="$HDEC2" WORKTREE_PATH="" V_TMP_DIR="$HDEC2/.v/tmp" bash "$EMIT" v-pre-flight ) >/dev/null 2>&1
+    grep -q '^PHASES_TOTAL_WALLCLOCK_SEC=0$' "$HDEC2/.v/artifacts/gate-summary-${SIDH2}.txt" 2>/dev/null \
+      && ok "H5c PHASES_TOTAL_WALLCLOCK_SEC=0 on retry (the first run crossed a whole-second boundary)" \
+      || no "H5c wallclock is not 0, twice ($(grep '^PHASES_TOTAL_WALLCLOCK_SEC=' "$GS"))"
+  fi
 fi
 
 # ── I. POST-REVIEW HARDENING (adversarial review, 2026-08-29) ───────────────────────────

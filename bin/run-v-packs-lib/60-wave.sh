@@ -78,7 +78,7 @@ ${_dup_hash}	${name}"
       [ -n "${pids[$j]:-}" ] || continue                # not launched, or already disposed
       f="${packs[$j]}"; name="$(pack_name "$f")"
       if kill -0 "${pids[$j]}" 2>/dev/null; then        # pid still reported alive — running, OR an unreaped zombie
-        { [ -f "$LOG_DIR/$name.log.timedout" ] || grep -E '"type":[[:space:]]*"result"' "$LOG_DIR/$name.log" 2>/dev/null | tail -1 | jq -e '.type=="result"' >/dev/null 2>&1; } || continue   # no terminal state → truly still running
+        { [ -f "$LOG_DIR/$name.log.timedout" ] || { _rl="$(grep -E '"type":[[:space:]]*"result"' "$LOG_DIR/$name.log" 2>/dev/null | tail -1)"; [ -n "$_rl" ] && printf '%s' "$_rl" | jq -e '.type=="result"' >/dev/null 2>&1; }; } || continue   # no terminal state → truly still running
       fi
       wait "${pids[$j]}" 2>/dev/null || true            # reap the finished subshell (returns at once — it is done)
       _pv="$(verdict "$name")"

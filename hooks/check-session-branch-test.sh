@@ -20,7 +20,7 @@ mkrepo(){ local d; d=$(mktemp -d "${TMPDIR:-/tmp}/csb.XXXXXX")
   git -C "$d" commit -q --allow-empty -m init; echo "$d"; }
 # run the hook with CWD inside the repo (it resolves REPO_ROOT from CWD); pass extra env as KEY=VAL args
 run(){ local r="$1"; shift; ( cd "$r"; env "$@" bash "$HOOK" 2>/dev/null ); }
-warns(){ printf '%s' "$1" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION BRANCH WARNING")' >/dev/null 2>&1; }
+warns(){ [ -n "$1" ] && printf '%s' "$1" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION BRANCH WARNING")' >/dev/null 2>&1; }   # [ -n ]: jq 1.6 exits 0 on empty input
 
 # T1 (behavioral): on a feature branch, the hook MUST emit the warning JSON.
 R=$(mkrepo); git -C "$R" checkout -q -b feature/x

@@ -16,7 +16,8 @@ no(){ FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 
 # run <json> -> prints hook stdout; sets RC
 run(){ printf '%s' "$1" | bash "$HOOK" 2>/dev/null; }
-is_deny(){ printf '%s' "$1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; }
+# [ -n ] first: jq 1.6 (Debian 12) exits 0 for `jq -e` on empty input, which read "no output" as a deny.
+is_deny(){ [ -n "$1" ] && printf '%s' "$1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; }
 
 echo "=== T1: Bash command writing to .v-tmp/ -> DENY ==="
 OUT=$(run '{"tool_name":"Bash","tool_input":{"command":"echo x > .v-tmp/foo.txt"}}')

@@ -29,7 +29,8 @@ REPO="$BASE/repo"; mkdir -p "$REPO"; ( cd "$REPO" && git init -q && echo 'x' > t
 
 # run from inside the repo so the hook's `git rev-parse` sees it
 run(){ local json="$1"; ( cd "$REPO" && printf '%s' "$json" | bash "$HOOK" 2>/dev/null ); }
-is_deny(){ printf '%s' "$1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; }
+# [ -n ] first: jq 1.6 (Debian 12) exits 0 for `jq -e` on empty input, which read "no output" as a deny.
+is_deny(){ [ -n "$1" ] && printf '%s' "$1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; }
 mark_readonly(){ : > "$HOME/.claude/runtime/readonly-session-${SID}"; }
 unmark(){ rm -f "$HOME/.claude/runtime/readonly-session-${SID}"; }
 

@@ -319,7 +319,8 @@ below, and the list is not exhaustive.
   14 checks fail every time under stock bash 3.2, and with GNU tools a few timing-sensitive ones fail
   under load. [`scripts/known-issues.txt`](scripts/known-issues.txt) records the most checks allowed to
   fail on each platform, and the runner reports the file as `KNOWN` only within that bound. A test file that skips entirely counts as a
-  failure, since the runner supplies every input.
+  failure, since the runner supplies every file it needs; a skip because an optional tool such as PHP
+  isn't installed is reported instead.
 - **Changed for publication:**
   - Names of private projects and products, session identifiers, commit hashes, ticket numbers,
     real run times and dollar figures were removed or generalized in comments and messages. Test

@@ -103,7 +103,7 @@ CAD_IN="$(printf '{"tool_name":"Write","session_id":"%s","cwd":"%s"}' "$SID" "$R
 C1="$(printf '%s' "$CAD_IN" | bash "$HOOK" 2>/dev/null || true)"
 C2="$(printf '%s' "$CAD_IN" | bash "$HOOK" 2>/dev/null || true)"
 if printf '%s' "$C1" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1 \
-   && ! printf '%s' "$C2" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1; then
+   && ! { [ -n "$C2" ] && printf '%s' "$C2" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1; }; then   # [ -n ]: jq 1.6 exits 0 on empty input
   ok "cadence: 1st injection emits, 2nd identical-state injection is DE-DUPED (no redundant re-inject)"
 else
   no "cadence de-dup failed (2nd identical board re-injected or 1st silent)" "c1=$(printf '%s' "$C1" | head -c 30) c2=$(printf '%s' "$C2" | head -c 30)"

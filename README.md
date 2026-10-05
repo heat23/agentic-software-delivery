@@ -424,8 +424,9 @@ checks passed: 3236   skipped: 3   failing files: 0   known issues: 1
 
 The runner copies the repository into a scratch `$HOME` and clears your Claude Code settings from the
 environment, so nothing on your machine is touched. Use it rather than running a test file directly:
-each test expects to find the snapshot under `~/.claude`. If a file fails, the runner shows the end
-of its output; a file that skips entirely also counts as a failure. Pass part of a path to run a
+each test expects to find the snapshot under `~/.claude`. If a file fails, the runner shows its failing
+checks. A file that skips entirely counts as a failure, unless the reason is an optional tool that
+isn't installed (such as PHP), which is reported on the final line. Pass part of a path to run a
 subset, for example `bash scripts/run-tests.sh hooks/`. It requires `bash`, `git`, `jq`, `python3`,
 `openssl`, `perl` and `shasum`. [`tests.yml`](.github/workflows/tests.yml) runs the suite on every
 push on macOS with the stock bash 3.2, on Ubuntu with GNU tools, and on Debian 12, whose older mawk is
