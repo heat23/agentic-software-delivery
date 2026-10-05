@@ -1,4 +1,4 @@
-# AI Engineering Org
+# Agentic Software Delivery
 
 **What does good engineering management look like when part of the team is AI?** This is my working
 answer: a delivery pipeline run by AI agents, where the rules that matter are enforced in code rather
@@ -7,7 +7,7 @@ without my sign-off.
 
 **Sudhir Prakash**, engineering leader · [sudhirprakash.com](https://sudhirprakash.com) · I use this to build my own products.
 
-[![tests](https://github.com/heat23/ai-engineering-org/actions/workflows/tests.yml/badge.svg)](https://github.com/heat23/ai-engineering-org/actions/workflows/tests.yml)
+[![tests](https://github.com/heat23/agentic-software-delivery/actions/workflows/tests.yml/badge.svg)](https://github.com/heat23/agentic-software-delivery/actions/workflows/tests.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Built on Claude Code](https://img.shields.io/badge/built%20on-Claude%20Code-d97757)
 ![Bash and Python](https://img.shields.io/badge/stack-Bash%20%7C%20Python-informational)
@@ -404,8 +404,8 @@ With more time:
 ### Run it (about 20 minutes)
 
 ```bash
-git clone https://github.com/heat23/ai-engineering-org.git
-cd ai-engineering-org
+git clone https://github.com/heat23/agentic-software-delivery.git
+cd agentic-software-delivery
 bash scripts/run-tests.sh
 ```
 

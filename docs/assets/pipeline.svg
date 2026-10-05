@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" width="1200" height="620" role="img" aria-labelledby="t d">
-  <title id="t">AI Engineering Org: the delivery pipeline</title>
+  <title id="t">Agentic Software Delivery: the pipeline</title>
   <desc id="d">AI agents take each piece of work through six stages (plan, build, test, review, verify, release), several sessions at a time in parallel waves. Audits run on demand and their findings become the next plan. Nothing is pushed or deployed until a human has reviewed it. Underneath, an enforcement layer of hooks runs outside the model.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
