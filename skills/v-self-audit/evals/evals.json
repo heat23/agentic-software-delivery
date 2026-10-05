@@ -1,0 +1,17 @@
+{
+  "skill_name": "v-self-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-self-audit run a full regression + efficiency audit of the /v orchestrator",
+      "expected_output": "Runs all 6 stages against the local /v system (code audit, fact-based efficiency evaluation, independent codex adversarial review, synthesis, testing audit, testing synthesis) by dispatching sub-agents via v-dispatch-subagent.sh (never the Agent tool). Produces AUDIT_REPORT, EFFICIENCY_REPORT, ADVERSARIAL_REVIEW, SHIP_LIST, TESTING_AUDIT, TESTING_PLAN, and a consolidated SELF_AUDIT_SUMMARY under ~/.claude/.v/self-audit/${SID}/. The SHIP_LIST recommends only LOW-risk, gate-safe items by default (MEDIUM/HIGH deferred); EFFICIENCY_REPORT carries measured cached-vs-non-cached token cost + per-stage wall-clock; mutation/backtest run on temp copies only. Leaves zero tracked-source diff and implements nothing.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-self-audit --quick (stages 1-4 only, skip the testing audit and synthesis)",
+      "expected_output": "Runs stages 1-4 only (code audit, efficiency, adversarial review, synthesis), skipping the testing audit/synthesis. Produces AUDIT_REPORT, EFFICIENCY_REPORT, ADVERSARIAL_REVIEW, SHIP_LIST, and SELF_AUDIT_SUMMARY with the testing artifacts marked skipped. Still read-only on the /v system and stops at the validated plan, implementing nothing.",
+      "files": []
+    }
+  ]
+}

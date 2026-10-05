@@ -1,0 +1,14 @@
+# Hot files — known merge-conflict hotspots during parallel sessions.
+# Shared between v/SKILL.md (documentation) and auto-branch-on-scope.sh (enforcement).
+# One file path per line, relative to repo root. Lines starting with # are comments.
+#
+# CUSTOMIZE THIS FILE per project. These are common defaults; add your project's
+# actual merge-conflict hotspots (route files, shared config, lock files).
+#
+# Common examples by framework:
+#   Laravel: routes/web.php, routes/api.php, bootstrap/app.php
+#   Next.js: next.config.js, middleware.ts, app/layout.tsx
+#   Rails: config/routes.rb, Gemfile
+#   Django: urls.py, settings.py
+composer.json
+package.json

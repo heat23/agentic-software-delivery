@@ -1,0 +1,35 @@
+{
+  "skill_name": "v-forensics-pack-runner",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-forensics-pack-runner ~/dev/myapp/audits/batch-07-02/v-packs — the batch finished and run-v-packs printed 'queue empty — nothing left to do'. Verify that's true.",
+      "expected_output": "Treats the runner's status line as a CLAIM to verify, not truth. Cross-checks .done/ contents against git ancestry (every archived pack's session commits are ancestors of main via commit-witnesses/sid correlation), enumerates .needs-review/ parks with their triage kinds, lists worktree branches with commits ahead of main and maps each to its drain verdict. Reports any archive-vs-main contradiction as the headline finding with the runlog + git evidence side by side. Read-only: does NOT run the drain or move any pack file — it names the exact drain/mv commands for the operator.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-forensics-pack-runner — wave-2 of last night's batch shows 3 packs in .needs-review/ all labeled WEDGED. Were they actually stuck?",
+      "expected_output": "Reads each parked pack's runlog tail + .timedout sidecar and distinguishes genuinely wedged sessions (no log events for the idle window, no result event) from actively-working sessions killed at the ceiling (events up to the kill — the photo-finish class) and from long silent single commands that merely LOOK idle. For any pack whose gauntlet artifacts flushed after the kill, checks whether a later drain landed the work and whether the pack should reconcile to .done/. Recommends the right remediation per pack (raise --timeout / re-run / reconcile) without executing any of it.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-forensics-pack-runner — one of the fleet sessions itself misbehaved: its gauntlet self-check emitted FAIL but it still claims completion in its transcript. Dig into why.",
+      "expected_output": "Recognizes this as a per-SESSION orchestration/gate-integrity question — out of this skill's lane — and hands it to /v-forensics per the sibling boundary, rather than duplicating that analysis. Still owns the landing-layer half: how the runner CLASSIFIED that session's log (verdict token path), whether the pack was archived/parked/kept correctly given the log contents, and whether the runner's own status output told the truth about it.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "/v-forensics-pack-runner — every worktree branch shows 0 commits ahead of main and the runner exited 0, so the batch looks fully landed. Confirm nothing was lost.",
+      "expected_output": "Does NOT accept ahead=0 as landed. Runs git status --porcelain + git diff --cached --stat in EVERY worktree and classifies any with staged/unstaged source as STAGED-ONLY STRAND (false-landed-by-reset class), naming the exact index-only files at loss risk from any prune/reset. Reconciles the runner's exit 0 against that ground truth: staged-only work off main with exit 0 is the P0 headline (autonomy-invariant violation), with the recovery command (commit in the worktree, then drain/merge-back) named for the operator — never executed.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "/v-forensics-pack-runner — a worktree's .claude-session-lock SID doesn't match the -sid8 suffix in its branch name or its WORKTREE_HANDOFF SID. The batch also ran with V_PACK_DRAIN=0. Assess.",
+      "expected_output": "Distinguishes legitimate rescue-pack ADOPTION (lock RE-KEYED by an adopter session — verifies the re-key/provenance trail; adopt-or-create is forbidden) from wrong-SID attribution (P0 only when no adoption trail exists). Classifies the underlying work by ground truth, reporting both SIDs. Separately: recovers V_PACK_DRAIN=0 from the runlog/invocation and therefore treats stranded-at-end as BY-DESIGN rescue-mode behavior — an operational note with the exact drain command, not a P0 'runner claims success while stranded' finding.",
+      "files": []
+    }
+  ]
+}

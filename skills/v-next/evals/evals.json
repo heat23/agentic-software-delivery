@@ -1,0 +1,35 @@
+{
+  "skill_name": "v-next",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-next --root=~/dev — what should I work on today across all my projects?",
+      "expected_output": "Auto-discovers git repos under ~/dev (capped at 20), reads each project's .v/artifacts/ (or repo root fallback) for the newest AUDIT_REPORT_*/SEO_AUDIT_*/BUG_HUNT_REPORT_* by mtime (never filename-lexicographic sort), computes days-since-last-run per audit family against the staleness thresholds, greps the latest consolidated report for open P0/P1/P2 counts, detects launch stage via the shared greenfield/growth/mature heuristic, scans for stranded worktrees (git worktree list, >7 days old) and unmerged branches, and checks CI state via gh run list when available (tagging ci_data_source: unavailable otherwise, never fabricating a status). Produces ONE ranked V_NEXT_REPORT_${CLAUDE_SESSION_ID}.md combining all projects, with the #1 item being the highest-scored candidate (P0 findings and red CI always outrank staleness-only items). Recommends a specific next skill per item (e.g. /v-audit-seo, /v-merge-all, /v-ci-fix) but does NOT invoke any of them itself.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-next — I only care about my two side projects at ~/dev/project-a and ~/dev/project-b",
+      "expected_output": "Uses the explicit --projects= style resolution (Step 1 rule 1) and scans ONLY those two paths, skipping auto-discovery entirely. If either path is not a git repo, skips it with a warning rather than failing the whole run. Produces the same V_NEXT_REPORT structure scoped to just these two projects.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-next run on a project with no prior /v activity at all — no .v/artifacts, no audit reports, no CLAUDE.md",
+      "expected_output": "Recognizes this as a no-signal project rather than fabricating staleness/severity/stage data. Lists it under NO_SIGNAL_PROJECTS in the report with a recommendation to run /v-setup-project or a first audit, and does NOT assign it a fabricated PRIORITY_SCORE or invent findings. A project with genuinely no signal is a valid, honestly-reported outcome, not an error.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "/v-next invoked headless (no interactive operator), no --root or --projects args, and ~/dev does not exist on this machine",
+      "expected_output": "Exercises Step 1 rule 3's blocked branch: does NOT hang waiting for input, does NOT fabricate a root, and does NOT report the blocked outcome as bare stdout. STILL writes V_NEXT_REPORT_${CLAUDE_SESSION_ID}.md with the standard # V_NEXT_REPORT heading and session: line, plus top-level blocked: true, reason: no root directory provided and none discoverable, and an empty ranked-actions section — the exact filename+heading the Stop hook's report-only escape recognizes, so a legitimately-blocked headless run never false-blocks at session end.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "/v-next --root=~/dev where ~/dev contains 25+ immediate-subdirectory git repos",
+      "expected_output": "Exercises Step 1's 20-project cap: scans exactly 20 projects, sets projects_truncated: true with the count of skipped repos (5+) named in the report rather than silently dropped, and states the truncation in the executive summary so the operator knows coverage was bounded (no-silent-caps rule). Ranking and per-project reads behave normally for the 20 scanned projects.",
+      "files": []
+    }
+  ]
+}

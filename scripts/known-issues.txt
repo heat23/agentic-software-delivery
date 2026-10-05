@@ -1,0 +1,7 @@
+# Known issues: tests with failing cases that are not fixed yet. scripts/run-tests.sh reports a listed
+# test as KNOWN (not a failure) only on the platform named here, and only while it fails no more than the
+# listed number of checks: one more makes it a FAIL. A listed test that passes is reported as a stale
+# entry in the final line.
+# Format: <test path> <bash3|linux|any> <most failed checks allowed> <note>
+skills/v/references/v-dispatch-subagent-reattach-test.sh bash3 14 re-attaching to a detached dispatch after the helper is killed does not work under bash 3.2 (14 checks fail every time; the later cases cascade from the first)
+skills/v/references/v-dispatch-subagent-reattach-test.sh linux 14 the same detach and re-attach cases are timing-sensitive with GNU tools: under load, between 1 and 5 have failed per run

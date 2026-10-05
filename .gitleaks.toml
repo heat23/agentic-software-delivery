@@ -1,0 +1,12 @@
+# The security conventions show what a leaked key looks like, and a scanner test plants one.
+# Those example keys are fake (sk_live_abc123...) and allowed only in those two files; everything
+# else uses gitleaks' default rules. [[allowlists]] needs gitleaks 8.25 or later.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake example keys in documentation and test fixtures"
+condition = "AND"
+regexTarget = "match"
+regexes = ['''sk_live_abc123''']
+paths = ['''skills/_v-security\.md$''', '''skills/v/references/verify-done-scan-test\.sh$''']

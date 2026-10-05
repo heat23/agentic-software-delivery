@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-merge-all",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Consolidate 3 completed worktree branches (feature/billing, feature/notifications, feature/admin-dashboard) back into main. All worktrees have passed pre-flight and verify-done. No merge conflicts expected.",
+      "expected_output": "Should: list all worktree branches, verify each has passing pre-flight and verify-done artifacts, merge in dependency order (or alphabetical if no dependencies detected), run unified quality gates after final merge, recover session artifacts from worktrees before cleanup, clean up worktree directories after successful merge. Must NOT merge while other sessions are actively writing (check lock files). Must NOT push without running quality gates on the unified result.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Consolidate 2 worktree branches where feature/auth and feature/billing both modified app/Http/Kernel.php, creating a merge conflict on the middleware registration.",
+      "expected_output": "Should: detect the merge conflict on Kernel.php during the second merge, present both versions of the conflicting section to the user, NOT auto-resolve ambiguous conflicts (middleware ordering matters for auth+billing), ask for user guidance on resolution strategy, re-run quality gates after conflict resolution, write a merge report documenting the conflict location, both versions, and final resolution.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Consolidate after a remediation run where the latest remediation state is 'completed' and changes have been synced to the repo root. A remediation worktree (ecosystem-fix-abc123) still exists.",
+      "expected_output": "Should: detect the remediation worktree by prefix (ecosystem-fix*), recognize it as a cleanup-only target (not a merge source) since remediation is completed and synced, clean up the remediation worktree without merging it (changes already in repo root), verify the repo root has the expected changes, run quality gates on the final state. Must NOT double-apply remediation diffs by merging an already-synced remediation worktree.",
+      "files": []
+    }
+  ]
+}

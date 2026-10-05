@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-check",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run a full audit on my Laravel 13 + Inertia.js + React SaaS. It's a project management tool with user auth, team workspaces, file uploads to S3, Stripe billing via Laravel Cashier, and a REST API. Focus on security, performance, and production readiness.",
+      "expected_output": "AUDIT_REPORT with findings across all audit domains (security, performance, UX, data, SEO quick-check, analytics instrumentation, accessibility). Should include: CRITICAL findings for any auth/session issues, S3 bucket policy review, Stripe webhook verification, Laravel CSRF protection check, rate limiting assessment via Laravel's built-in throttle middleware, N+1 query detection on Eloquent relationships, Core Web Vitals surface check on Inertia pages, and a .v-prompt-packs/v-check/ directory with scoped fix sessions. Report uses FINDING_FORMAT with severity, confidence, and evidence fields.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Audit just the security and performance domains of my Laravel 13 + React + Inertia.js e-commerce app. It uses Eloquent + PostgreSQL, Laravel Sanctum for API auth, and is deployed on Forge/DigitalOcean. I'm about to launch and need to know if there are blockers.",
+      "expected_output": "Scoped AUDIT_REPORT covering security and performance domains only. Security findings should check: Sanctum token configuration, middleware protection on Inertia routes, Eloquent mass assignment guards, CSP headers, CORS policy in config/cors.php. Performance findings should check: Inertia partial reloads vs full page loads, Vite bundle size, Eloquent eager loading patterns, Redis/database query caching strategy, queue worker configuration. Each finding includes severity (CRITICAL/HIGH/MEDIUM/LOW), confidence level, and specific file/line evidence. Should NOT audit UX, analytics, or other out-of-scope domains.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I just inherited a Laravel 13 codebase with a Blade frontend — no Inertia, no React. 200+ models, 100+ controllers, zero documentation, minimal tests. Run an audit focused on understanding what's here and what's broken before I start making changes.",
+      "expected_output": "AUDIT_REPORT with emphasis on code quality, architecture understanding, and technical debt. Should include: Composer dependency audit (outdated packages, known vulnerabilities), PHPUnit test coverage assessment (likely minimal), dead route detection, API endpoint inventory from routes/api.php and routes/web.php, Eloquent relationship map, migration history review, .env configuration check, in-repo deploy-relevant config correctness (committed CI workflow files, Procfile-class manifests) — not platform choice, which is off-stack per _v-audit.md § In-App Actionability Boundary. Findings should be weighted toward helping a new developer understand the codebase — architecture overview, service/action class patterns, Blade component inventory, and prioritized 'fix first' recommendations. Should recommend /v-plan for codebase understanding route.",
+      "files": []
+    }
+  ]
+}

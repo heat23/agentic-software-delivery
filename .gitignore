@@ -1,0 +1,16 @@
+.DS_Store
+*.bak
+*-bak
+__pycache__/
+.v/
+.claude/
+runtime/
+*.log
+*.jsonl
+.env*
+*.pem
+*.key
+.gauntlet-hmac-key
+DISPATCH_PROVENANCE_*
+*_REPORT_*.md
+HANDOFF_*.md

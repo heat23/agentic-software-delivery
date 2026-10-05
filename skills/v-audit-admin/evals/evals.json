@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-audit-admin",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Quick admin audit on my Laravel 13 + Inertia.js + React SaaS. Admin panel lives under /admin with ~12 resources (Users, Sites, Subscriptions, Invoices, etc.). I'm mid-iteration and just want the fast read on functional and operational gaps.",
+      "expected_output": "Quick mode audit. Discovery runs Pass 1 (route scan) + Pass 2 (model scan) only — no Pass 3, no fingerprints. Domains 1, 5, 6 run sequentially (PM + OPS + AI); no subagents dispatched. Feature Inventory Matrix has CRUD columns populated from routes, all other columns `?`. Domain 6 shell-break checks limited to the Quick-mode list in admin-audit-checklists.md (no fingerprint-based divergence detection). Findings limited to P0/P1. Composite score uses Quick weights: PM 55%, OPS 35%, AI 10%. AUDIT_INCOMPLETE only if all 3 of 3 domains fail. Writes ADMIN_AUDIT_REPORT_[timestamp]_[sid].json + companion .md, then Steps 3-4 still run: .v-prompt-packs/v-audit-admin-<MM-DD>/ generated via a fork-safe claude -p subprocess at the operator's model (v-dispatch-subagent.sh --model parent --mode self-write, NOT the Agent tool) and validated.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Standard admin audit for my B2B SaaS admin panel (Laravel + Inertia + React, admin prefix /admin, shared AdminLayout shell). I want the recommended default depth — include design consistency but I don't need the full pre-launch gauntlet.",
+      "expected_output": "Standard mode audit. Discovery runs Pass 1 + Pass 2 + Pass 3-lite (fingerprint computation ONLY — no feature detection loop). Domains 1, 2, 5, 6 run sequentially in the main context (PM + DES + OPS + AI); Domain 2 runs INLINE (no subagent dispatch in Standard) and its shared-shell conformance check consumes the Pass 3-lite fingerprints. Feature Inventory Matrix: CRUD columns from routes, feature columns stay `?`. Findings include P0/P1/P2. Composite score uses Standard weights: PM 45%, OPS 30%, DES 15%, AI 10%. AUDIT_INCOMPLETE only if 3 of 4 domains fail. Writes ADMIN_AUDIT_REPORT JSON + companion .md and generates the validated .v-prompt-packs/v-audit-admin-<MM-DD>/ pack. Duration target ~8-10 min.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Thorough pre-launch admin audit. Laravel 13 + Inertia + React app, admin under /admin, 20+ Eloquent models, RBAC via spatie/laravel-permission, Cashier subscriptions. We ship to production next week — I want everything: design drift, UX states, edge cases, audit logging, the works.",
+      "expected_output": "Thorough mode audit. All three discovery passes run in full, including per-page feature detection and structural fingerprints. Domains 1, 5, 6 run sequentially first, then Domains 2, 3, 4 dispatch as 3 parallel fork-safe claude -p subprocesses (v-dispatch-subagent.sh --mode capture per domain, supervised by v-supervise-children.sh — NOT the Agent tool, which fails silently from context: fork; 5-minute wall-clock timeout each per v-core-error-handling.md; completion = artifact on disk), findings merged via _v-review.md dedup protocol. Feature Inventory Matrix fully populated (Y/N/?). Findings across P0/P1/P2/P3 (P3 exclusively from Domain 2-4 subagents' `low` severity per [[v-core-severity]]; Domains 1, 5, 6 never natively emit it) with evidence file:line citations (Gates 0, 1, 2, 8 applied; per-dim floors from v-audit-floors.md). Composite score uses Thorough weights: PM 35%, OPS 20%, UX 15%, QA 15%, DES 10%, AI 5%; failed domains excluded from denominator, AUDIT_INCOMPLETE if 4 of 6 fail. Writes ADMIN_AUDIT_REPORT JSON + .md, generates .v-prompt-packs/v-audit-admin-<MM-DD>/ with 00-README.md session map + self-contained /v-prefixed session files, validates the pack, and recommends /v-audit-consolidate if other recent audits exist.",
+      "files": []
+    }
+  ]
+}

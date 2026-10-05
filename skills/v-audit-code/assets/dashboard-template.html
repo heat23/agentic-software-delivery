@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!--
+  Audit dashboard template — self-contained, responsive, no external dependencies.
+  To use: edit the CONFIG block (title/verdict), the SCORE array (your categories),
+  and the FINDINGS array. Keep it tasteful and calm; do not add gradients, heavy
+  animation, or emoji. Delete this comment when you ship. Pair it with a written report.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;--txt:#e6e9ef;--muted:#9aa3b2;--accent:#6ea8fe;--p0:#ff5d5d;--p1:#ffb547;--p2:#5fd0a8;--p3:#6ea8fe;--go:#5fd0a8}
+  @media (prefers-color-scheme: light){:root{--bg:#f6f7f9;--panel:#fff;--panel2:#f0f2f6;--line:#e4e7ec;--txt:#1c2128;--muted:#5a6472;--accent:#2563eb}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:30px 20px 80px}
+  h1{font-size:23px;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13.5px;margin-bottom:20px}
+  .verdict{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:24px}
+  .badge{font-weight:700;padding:6px 13px;border-radius:999px;font-size:13px;border:1px solid}
+  .verdict .note{color:var(--muted);font-size:13px;flex:1;min-width:240px}
+  h2{font-size:15px;margin:32px 0 12px;letter-spacing:.01em}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  td.n{font-weight:800;text-align:center;width:44px}
+  .bar{height:7px;background:var(--panel2);border-radius:999px;overflow:hidden;min-width:90px}
+  .bar>i{display:block;height:100%;border-radius:999px;transition:width .3s ease}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}
+  button.f{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+  button.f.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .card{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:11px;padding:13px 15px;margin-bottom:10px}
+  .card .top{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:5px}
+  .sev{font-weight:800;font-size:11px;padding:2px 8px;border-radius:6px}
+  .tag{font-size:11px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .card .title{font-weight:650;font-size:14.5px}
+  .card .row{font-size:13px;margin-top:6px}
+  .card .row b{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.4px;margin-right:6px}
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
+  footer{margin-top:34px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title"></h1>
+  <div class="sub" id="subtitle"></div>
+
+  <div class="verdict">
+    <span class="badge" id="verdictBadge"></span>
+    <span class="note" id="verdictNote"></span>
+  </div>
+
+  <h2>Scorecard</h2>
+  <table id="score"><thead><tr><th>#</th><th>Category</th><th class="n">Score</th><th style="width:150px">Level</th><th>Why</th></tr></thead><tbody></tbody></table>
+
+  <h2>Findings</h2>
+  <div class="controls" id="filters"></div>
+  <div id="findings"></div>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+/* ---- CONFIG: edit these ---- */
+const CONFIG = {
+  title: "Product name — readiness audit",
+  subtitle: "scenario · commit · date",
+  verdict: { label: "VERDICT", tone: "go", note: "One or two honest sentences on the bottom line." }, // tone: go | conditional | nogo
+  footer: "Full detail in the written report."
+};
+// Each: {n, category, score (0-10), why}
+const SCORE = [
+  // {n:1, category:"Example category", score:8, why:"one-line evidence-based rationale"},
+];
+// Each: {id, sev:"p0|p1|p2|p3", area, title, evidence, fix, effort}
+const FINDINGS = [
+  // {id:"P1-1", sev:"p1", area:"Security", title:"...", evidence:"file:line — ...", fix:"...", effort:"S"},
+];
+/* ---- end CONFIG ---- */
+
+const toneMap = {go:["var(--go)","GO"], conditional:["var(--p1)","CONDITIONAL"], nogo:["var(--p0)","NO-GO"]};
+title.textContent = CONFIG.title; subtitle.textContent = CONFIG.subtitle; footer.textContent = CONFIG.footer;
+const [tc] = toneMap[CONFIG.verdict.tone] || ["var(--muted)"];
+verdictBadge.textContent = CONFIG.verdict.label;
+verdictBadge.style.color = tc; verdictBadge.style.borderColor = tc; verdictBadge.style.background = "color-mix(in srgb,"+tc+" 15%, transparent)";
+verdictNote.textContent = CONFIG.verdict.note;
+
+const lvl = v => v<=3?"var(--p0)":v<=6?"var(--p1)":v<=8?"var(--accent)":"var(--go)";
+document.querySelector("#score tbody").innerHTML = SCORE.map(s=>
+  `<tr><td class="n">${s.n}</td><td>${s.category}</td><td class="n" style="color:${lvl(s.score)}">${s.score}</td>
+   <td><div class="bar"><i style="width:${s.score*10}%;background:${lvl(s.score)}"></i></div></td>
+   <td style="color:var(--muted)">${s.why||""}</td></tr>`).join("");
+
+const sevColor = {p0:"var(--p0)",p1:"var(--p1)",p2:"var(--p2)",p3:"var(--p3)"};
+const areas = [...new Set(FINDINGS.map(f=>f.area))];
+let curSev="all", curArea="all";
+filters.innerHTML =
+  `<button class="f active" data-sev="all">All</button>`+["p0","p1","p2","p3"].filter(s=>FINDINGS.some(f=>f.sev===s)).map(s=>`<button class="f" data-sev="${s}">${s.toUpperCase()}</button>`).join("")
+  + areas.map(a=>`<button class="f" data-area="${a}">${a}</button>`).join("");
+function render(){
+  const list = FINDINGS.filter(f=>(curSev==="all"||f.sev===curSev)&&(curArea==="all"||f.area===curArea));
+  findings.innerHTML = list.map(f=>{
+    const c = sevColor[f.sev]||"var(--muted)";
+    return `<div class="card" style="border-left-color:${c}">
+      <div class="top"><span class="sev" style="color:${c};background:color-mix(in srgb,${c} 15%,transparent)">${f.id}</span>
+      <span class="tag">${f.area}</span><span class="title">${f.title}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--muted)">effort ${f.effort||"—"}</span></div>
+      <div class="row"><b>Evidence</b><code>${f.evidence||""}</code></div>
+      <div class="row"><b>Fix</b>${f.fix||""}</div></div>`;
+  }).join("") || `<div class="sub">Nothing here — that's a good sign.</div>`;
+}
+filters.querySelectorAll("[data-sev]").forEach(b=>b.onclick=()=>{curSev=b.dataset.sev;filters.querySelectorAll("[data-sev]").forEach(x=>x.classList.remove("active"));b.classList.add("active");render();});
+filters.querySelectorAll("[data-area]").forEach(b=>b.onclick=()=>{curArea=curArea===b.dataset.area?"all":b.dataset.area;filters.querySelectorAll("[data-area]").forEach(x=>x.classList.toggle("active",x.dataset.area===curArea&&curArea!=="all"));render();});
+render();
+</script>
+</body>
+</html>

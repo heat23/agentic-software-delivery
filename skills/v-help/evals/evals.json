@@ -1,0 +1,17 @@
+{
+  "skill_name": "v-help",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-help (no topic filter, healthy ~/.claude/skills/ with all v-* skill directories readable)",
+      "expected_output": "Generates the Skill Catalog at RUNTIME rather than reading a hardcoded table (Gotcha 1 marks static tables as forbidden). Enumerates skills via the Glob tool (pattern `~/.claude/skills/v-*/SKILL.md` plus `~/.claude/skills/v/SKILL.md`), deriving each skill name from the returned path's parent directory — NOT a shell command, since this skill has no Bash tool. Reads each skill's `description:` first sentence and its contract `tier:` field, groups rows under the four H4 headings (Tier 1 — User-facing & Entry-points; Tier 2 — Orchestration primitives; Specialized — Audit/Growth/Design/Content; Comprehensive — Deep Specialist Audits), sorts alphabetically within each tier, and uses the `produces:` line for the third column. Skips any skill with `user-invocable: false` from the operator-visible table unless the operator explicitly asked to see runner-only skills. Appends the static sections unchanged (Common Workflows, Auto-Chaining Paths, Artifacts, Agents, Shared Modules, Gotchas, Removed Skills) since those don't need filesystem scanning. Outputs to console only — creates no files and runs no mutating commands, per the Rules block.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-help (catalog generation fails: the skills directory enumeration returns 0 directories)",
+      "expected_output": "Does NOT fabricate a skill list. Outputs the exact documented structured fallback: 'Skill catalog generation failed: {one-line cause}' (here, '0 skills found at expected path'), followed by 'Manual recovery:' with the three numbered steps — verify install via `ls -d ~/.claude/skills/v-*/`, re-run `/v-setup-project` or check the directory layout if empty, and open the named skill's SKILL.md to confirm frontmatter has both `name:` and `description:` if a parse error was the cause — then points the operator to the static Common Workflows and Auto-Chaining Paths sections as still usable without filesystem scanning. Still respects the Rules block: console-only output, no files created, no commands run beyond the read-only enumeration attempt.",
+      "files": []
+    }
+  ]
+}

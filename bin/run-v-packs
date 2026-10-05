@@ -1,0 +1,989 @@
+#!/usr/bin/env bash
+# run-v-packs — fire-and-forget runner for a directory of /v prompt packs.
+#
+#   JUST RUN:   run-v-packs <PACK_DIR>
+#
+# No flags to remember. Point it at a folder of packs and walk away. It:
+#   • finds every PACK — any .txt/.md file whose first line is `/v …` (READMEs, plans,
+#     validate.py, manifests are skipped automatically; they are not packs)
+#   • runs up to 5 packs in parallel, each a headless `claude -p` /v session with a UNIQUE pinned
+#     --session-id. The pinned id is what makes parallel safe: WITHOUT it, concurrent /v sessions fall back
+#     to resolving their identity via a single shared global file that every session overwrites, so they read
+#     each OTHER's task and boot empty ("no task content", 0 turns). Pinning the id + pre-seeding the task
+#     makes each session find its OWN task deterministically. (`-jN` sets the width ≤5; `--serial` forces 1.)
+#   • RESPECTS WAVES — packs run in dependency order. A pack's wave is its filename prefix
+#     (`w1-…`, `w2-…`) OR its subfolder (`wave-1/`, `w2/`). All of wave 1 must finish before
+#     wave 2 starts; packs WITHIN a wave run in parallel; an unprefixed pack is wave 0 (runs first).
+#     A file named `99-*` is the final VERIFY pack and always runs last, after every wave.
+#   • LANDS EACH WAVE ON MAIN before the next wave starts — after a wave drains, the same safe
+#     PID-gated drain used at end-of-run merges the wave's finished worktree branches into main, and a
+#     landing barrier verifies nothing is stranded off main or parked unverified. If part of a wave
+#     CANNOT land (merge conflict, QA hold, unverified park), the runner STOPS before the dependent
+#     waves — they would otherwise build on a main missing their dependency — and the 99-* VERIFY pack
+#     is skipped for the same reason. Re-running the same command resumes once the blocker is cleared;
+#     a resumed run RE-GATES FIRST (stranded/parked leftovers from a previous run block the new run's
+#     earliest wave the same way — landing them if it safely can, stopping loudly if it can't).
+#     (V_PACK_DRAIN=0, the existing drain opt-out, disables the barrier along with the drain.)
+#   • is fully unattended — never stops to ask permission
+#   • prints a heartbeat every minute so you can always tell it's working (not stuck)
+#   • MOVES a pack to <dir>/.done/ ONLY when /v ran the FULL gauntlet to the end (emits GAUNTLET_ATTESTED) —
+#     a partial run (stopped after implementation, no review/verify/QA), a "no-task" glitch, a rate-limit, or
+#     an error all leave the pack in place so the next pass re-runs it (this enforces true end-to-end completion)
+#   • KEEPS GOING until the folder is empty — on a rate-limit it waits out the reset window and resumes;
+#     re-running the same command any time also resumes (finished packs are already gone). If a wave can't
+#     finish (partial/error after retries), it STOPS before the dependent waves rather than running them on
+#     a broken dependency.
+#   • RECONCILES parked packs — if a later drain lands a stranded worktree whose pinned session-id matches
+#     a pack still sitting in .needs-review/ (0-turn park, but the work actually finished elsewhere), the
+#     pack is moved .needs-review/ -> .done/ automatically so the folder stops contradicting main. Also
+#     prunes any build/*|fix/* branch ref that is fully merged into main with zero commits ahead (leftover
+#     debris from a worktree cleaned up by other means) — never a branch with commits ahead or a live worktree.
+#   • AUTO-RETRIES a near-completion watchdog kill once before parking it — an ACTIVE timeout (the session was
+#     still working, not wedged) gets one more pass at no operator action (V_PACK_ACTIVE_RETRY=N to change the
+#     count; a WEDGED timeout never gets this grace — it would just wedge again).
+#   • CAN SELF-VERIFY a claimed GAUNTLET_ATTESTED completion against the actual gate artifacts on disk
+#     (PRE_FLIGHT_REPORT/AGENT_REVIEW/VERIFY_DONE_REPORT for that pack's session-id, in .v/artifacts/ or the
+#     repo root) before archiving to .done/ — opt-in via V_PACK_VERIFY_ARTIFACTS=1 (default off: a directory-
+#     existence heuristic can't safely tell "fabricated" apart from "this repo's completions are lighter than
+#     the full 3-artifact set", so this only activates for an operator who has confirmed the convention holds).
+#   • RECOVERS from a crashed runner — if a PRIOR run-v-packs died mid-pack (host restart, `kill -9`, OOM), its
+#     orphaned `claude` session is detected at startup, never double-dispatched, and adopted (waited out, or
+#     reaped if it overstays a grace period) before this run launches anything new.
+#   • RUNS A MULTI-BATCH ROOT SEQUENTIALLY — pointing it at a folder holding SEVERAL batch dirs (each with
+#     its own 00-README.md) no longer stops at a refusal (2026-07-11 operator request: detect → resolve →
+#     execute, no human in the loop). It runs the cross-batch conflict lint (EXACT duplicate packs are
+#     auto-quarantined to .needs-review/; cross-batch '## Files' overlaps are informational — sequential
+#     execution is their standing remedy), orders the batches oldest-00-README-first (the newest batch is
+#     the one authored aware of its siblings, so it lands last, on the state it expects), and runs each
+#     batch as its OWN full run — own waves, own lock, own 99-verify gate, nothing interleaves. A batch
+#     exiting nonzero STOPS the chain before later batches; re-running the same command resumes (finished
+#     batches are DONE-renamed / drained and no longer detected). Old refusal: V_PACK_MULTI_BATCH_SEQ=0.
+#     Override (ONE combined run; waves WILL interleave): V_PACK_ALLOW_MULTI_BATCH=1 — the lint still runs.
+#   • LINTS THE QUEUE FOR CONFLICTS before wave 1 — duplicate pack bodies and same-wave/cross-batch
+#     declared-'## Files' collisions (check-pack-conflicts.sh, the convention's own "file sets must not
+#     intersect within a wave" rule) are reported before anything launches. Warn-only by default;
+#     V_PACK_CONFLICT_GATE=1 makes findings block the run, V_PACK_CONFLICT_CHECK=0 skips the lint.
+#
+# Optional, NEVER required:  --serial (one at a time)  -jN (≤5)  --dry-run  --once  --no-archive  --max-turns N  --resume
+#   --resume       re-attempt every pack currently parked in .needs-review/ THIS run: move each back into the
+#                  queue before discovery so it is dispatched again. Use it to un-stick a batch whose closing
+#                  wave stranded resumable work (fork-did-real-work / timeout with uncommitted worktree) — the
+#                  per-pack retry-continuity contract makes the new session ADOPT its own dead prior worktree
+#                  (re-key lock → finish gauntlet → commit → merge) rather than redo from scratch. Opt-in, so it
+#                  can never silently re-wedge a run. Env: V_RESUME_PARKED=1.
+#   --model NAME   main-loop model for every pack session (default: sonnet — the /v flow is validated on it;
+#                  an inherited interactive default like Fable no-ops the parent loop, observed live).
+#                  `--model inherit` restores the old un-pinned behavior. Env: V_PACK_MODEL.
+#   --timeout MIN  per-pack wall-clock ceiling (default 75 serial; AUTO-RAISED to 150 under -j>1 unless you pin
+#                  one — concurrent gauntlets contend and outlive a serial ceiling). A session still actively
+#                  writing its log at the ceiling gets bounded grace (V_PACK_ACTIVE_GRACE_SEC, default half the
+#                  ceiling) before the kill. A session still running past all that is killed + parked
+#                  to .needs-review/ so it can't starve the run's other parallel slots forever. The park message
+#                  says WHICH kind it was: ACTIVE (log events right up to the kill — legitimately slow; raise
+#                  --timeout, and its finished gauntlet artifacts may still land via the end-of-run drain) vs
+#                  WEDGED (no log activity for ~5+ min — a stuck subagent dispatch / rate-limit stall). Heavy
+#                  packs (multi-hour estimates, concurrent full-suite gauntlets) routinely need more than 75.
+# Portable: works in any git repo. Logs (NDJSON, live): <PACK_DIR>/.runlogs/   Completed packs: <PACK_DIR>/.done/
+# Pack/wave convention (what counts as a pack, wave prefixes, accepted variants):
+#   ~/.claude/skills/references/v-runnable-pack-convention.md
+#
+# Advanced env vars (all optional; defaults in [brackets]). Flags above override where noted:
+#   V_PACK_MODEL [sonnet]        main-loop model for every pack session (=--model; `inherit` restores un-pinned)
+#   PACK_TIMEOUT [4500 sec]      per-pack wall-clock ceiling in SECONDS (=--timeout <MIN>; a wedged pack is killed+parked).
+#                                Auto-raised to 9000 under -j>1 when neither this env nor --timeout pinned a value (V-4b)
+#   V_PACK_ACTIVE_GRACE_SEC [PACK_TIMEOUT/2]  extra seconds an ACTIVELY-working session (log still being written) may
+#                                run past the ceiling before the watchdog kills it (A-GRACE; 0 disables)
+#   V_PACK_ZERO_TURN_SETTLE [180] max seconds to wait for a 0-turn pack's fork OP_TELEMETRY ledger to flush before
+#                                classifying it inconclusive (Z-SETTLE; the ledger often lands seconds AFTER the CLI
+#                                exits when gates were backgrounded — with it the pack auto-retries instead of parking)
+#   V_WEDGE_IDLE_SEC [300]       log-idle seconds before a timeout kill is labeled WEDGED vs ACTIVE (message only)
+#   V_PACK_TELEMETRY [1]         0 = skip per-pack /v-session-log capture after each finish
+#   V_PACK_DRAIN [1]             0 = skip the end-of-run v-drain-deferred-merges (auto-land ended worktrees)
+#   V_PACK_SETTLE_SEC [90]       settle wait before draining after a timeout-kill (0 disables; lets gate subagents flush)
+#   V_PACK_RECONCILE_PROOF [1]   0 = skip reconciling parked packs whose committed work is provably on main
+#   V_PACK_WITNESS_ARCHIVE [1]   0 = do NOT archive a pack whose OWN session's committed work is provably all on
+#                                main when its verdict was a parking one (a session that merged then crashed at a
+#                                post-merge step, e.g. session-log, before returning a clean `done`) — leaving
+#                                that on-main work un-archived re-dispatches the pack and can deadlock the barrier
+#   V_PACK_READONLY_RECONCILE [1] 0 = do NOT auto-archive a parked READ-ONLY verify pack (/v-pre-flight,
+#                                /v-verify-done) whose durable report proves it ran; such a pack ships no code,
+#                                so leaving it parked would deadlock the fix wave behind the findings it produced
+#   V_PACK_BACKFILL_CHECK [1]    0 = skip the end-of-run SESSION_LOG_MISSING backlog report (report-only, dry-run)
+#   V_PACK_BRANCH_GC [1]         0 = skip pruning fully-merged build/*|fix/* worktree branch refs
+#   V_CONCURRENCY_WARN [8]       warn when this many LIVE /v worktree sessions are already active in the repo
+#   V_FORK_WORK_MIN_OUT [1000]   min result output-tokens at num_turns==0 to classify a park as FORK-DID-WORK
+#   V_PACK_STRAND_RESUME [2]     bounded `claude --resume` continuations of a stranded 0-turn session (clean exit,
+#                                real fork work, no terminal token) before it parks — the wait-strand self-heal; 0 = off.
+#                                WORST-CASE WALL-CLOCK per pack compounds: original (full PACK_TIMEOUT) + each
+#                                resume (half PACK_TIMEOUT) ≈ 2× the ceiling at the default of 2 resumes
+#   CLAUDE_MAIN_BRANCH [main]    the repo's default branch, for stranded-branch/reconcile/drain checks
+#   V_PACK_ACTIVE_RETRY [1]      auto-retries granted to a near-completion (ACTIVE) watchdog timeout before parking
+#   V_PACK_LAND_RETRIES [4]      bounded retries for a wave-landing barrier blocked ONLY on self-resolving (deferred) merges
+#   V_PACK_ORPHAN_GRACE_SEC [600] how long to wait for a crashed-run's orphaned claude session before reaping it
+#   V_PACK_VERIFY_ARTIFACTS [0]  1 = distrust a "done" verdict with ZERO matching gate artifacts on disk for its sid
+#   V_RESUME_PARKED [0]          1 = un-park (=--resume): move parked .needs-review/ packs back to the queue this run
+#   V_PACK_DONE_RENAME [1]       0 = do NOT rename the pack-run dir to DONE-<name>/ on a truly-clean (exit 0) finish
+#                                (default: on a clean finish the dir is renamed with a DONE- prefix so a completed
+#                                batch is obvious and is not re-scanned; never fires on exit≠0 or on a repo/home root)
+#   V_PACK_ALLOW_MULTI_BATCH [0] 1 = run a dir holding MULTIPLE batch roots as ONE combined run (waves WILL
+#                                interleave across unrelated batches and only one 99-verify runs — know what
+#                                you're doing; the default handles a multi-batch root sequentially instead)
+#   V_PACK_MULTI_BATCH_SEQ [1]   0 = REFUSE a multi-batch root (the pre-2026-07-11 behavior: print the safe
+#                                per-batch loop + the cross-batch lint and exit 1) instead of auto-running
+#                                the batches sequentially oldest-first
+#   V_PACK_CONFLICT_CHECK [1]    0 = skip the pre-run pack-conflict lint (duplicate bodies / '## Files' collisions)
+#   V_PACK_CONFLICT_GATE [0]     1 = conflict-lint hard findings BLOCK the run (default: warn and continue)
+#   V_PACK_CONFLICT_SCRIPT [~/.claude/scripts/check-pack-conflicts.sh]  lint implementation the gate runs
+# Exit codes: 0 = queue clear; 1 = hard error (bad args / missing dep); 2 = ran fine but work remains (parked
+#   packs, a wave whose work could not all be landed on main, or a branch that will not self-resolve —
+#   failed / W-GATE / held / not-yet-drained).
+# Stopping a run: Ctrl-C works from an interactive terminal. For a DETACHED/backgrounded run (nohup, cron,
+#   launchd, `&`), use  kill <pid>  (SIGTERM) — bash pre-ignores SIGINT for async commands, so `kill -INT` is
+#   silently DROPPED there; SIGTERM triggers the same trap and reaps claude + its subagents three levels deep.
+#   Either signal can take up to ~20s to act (bash defers traps until the current heartbeat sleep finishes).
+#   Multi-batch sequential run: interactive Ctrl-C stops parent + current batch together (same foreground
+#   process group). For a DETACHED sequential run, killing the parent pid only stops FUTURE batches — also
+#   kill the CURRENT batch's child runner (its pid is line 1 of that batch's .runlogs/.runlock).
+#
+# ENGINEERING NOTE (2026-07-04, resilience hardening pass): evaluated a Python rewrite for this work and
+# REJECTED it. This file has ~10 dedicated behavioral test suites (~/.claude/scripts/run-v-packs-*-test.sh)
+# grown from real forensic incidents (echo-spoof guards, dup-dispatch, wave-landing races, portability
+# quirks across bash 3.2/4+ and macOS/Linux `ps`/`stat`/`date`) — a rewrite forfeits ALL of that coverage
+# and would silently reintroduce the exact bugs those tests now pin shut, for a rewrite that still has to
+# shell out to `git`/`jq`/`claude`/`uuidgen` either way. The gaps this pass closes (crash recovery, timeout
+# retry policy, on-disk artifact self-verification) are ADDITIVE hardening, not architecture problems: bash's
+# job control (`&`, `wait`, `kill -0`, `pkill -P`) is the natural fit for "manage OS processes + git state",
+# and every change below follows the file's existing conventions (single-runner lock, fail-open by default,
+# test-first, sidecar files for race-free cross-process signaling) rather than adding a second
+# language/runtime this solo operator would then have to maintain in parallel.
+#
+# ╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
+# ║ SECTION INDEX (maintainability map — keep in sync; run-v-packs-structure-test.sh enforces it)     ║
+# ╠══════════════════════════════════════════════════════════════════════════════════════════════════╣
+# ║  Bootstrap        set flags · re-exec guard · tunables · lib seam                                 ║
+# ║  LIB: discovery   run-v-packs-lib/10-discovery.sh — is_pack, _wave_norm, wave_of, _scan, list_*   ║
+# ║                   (all/in_wave/verify), waves_present, verify_pack, explain_rejected_candidates,  ║
+# ║                   oversized_packs, pack_name,                                                     ║
+# ║                   count_* (done/needs/needs_ack/left), _list_needs, _ack_ledger/_ack_names,       ║
+# ║                   _is_ack_quarantined (acknowledged-quarantine ledger), human_time               ║
+# ║  LIB: git-landing run-v-packs-lib/20-git-landing.sh — _main_branch, has_pending_landing           ║
+# ║  LIB: verdict     run-v-packs-lib/30-verdict.sh — _timeout_kind, _result_out_tokens,              ║
+# ║                   _fork_turns, _inconclusive_kind, _gauntlet_artifacts_verified,                  ║
+# ║                   _gauntlet_verdicts_not_failed, _newest_sid_artifact, verdict, sid_of,           ║
+# ║                   capture_telemetry, _attest_corpus, _attest_mention_only                         ║
+# ║  LIB: archive/rec run-v-packs-lib/40-archive-reconcile.sh — _archive_finished_pack, reset_epoch,  ║
+# ║                   reconcile_parked_by_sid, reconcile_parked_by_proof, reconcile_parked_readonly,  ║
+# ║                   gc_merged_branches, _drain_verdict_for, _land_and_reconcile, _unlanded_branches ║
+# ║  LIB: pack-exec   run-v-packs-lib/50-pack-exec.sh — _rotate_pack_log, _watchdog, _pack_is_readonly,║
+# ║                   _pack_prompt, _strand_is_stranded, _strand_resume_prompt, run_pack,             ║
+# ║                   _adopt_orphans                                                                  ║
+# ║  LIB: wave        run-v-packs-lib/60-wave.sh — _hb, run_pass_wave, drain_wave, land_wave,         ║
+# ║                   warn_skipped_lower_waves (+ run-state PASS_RL/HAD_TIMEOUT/RUN_SEEN_HASHES)      ║
+# ║  Main skeleton    _parse_args, _preflight_and_dirs (+multi-batch guard), _multi_batch_sequential, ║
+# ║                   _acquire_lock, _arm_dispatch, _clamp_concurrency, _emit_run_banner,              ║
+# ║                   _conflict_gate, _dry_run_report, _run_verify_pack, _final_sweep, _finish_report ║
+# ║  Entry point      main() + `BASH_SOURCE==$0` guard (sourced by tests → functions only, no run)    ║
+# ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+# MODULARIZATION (2026-07-04): cohesive groups are being extracted to run-v-packs-lib/*.sh in safe,
+# parity-guarded increments (see REFACTOR_PLAN). The lib files are SOURCED, so `source run-v-packs` still
+# defines the entire API for the harnesses and the single-file entry point is unchanged. Extracted so far:
+# discovery, git-landing, verdict, archive/reconcile, pack-exec, wave (above). main() + its helpers stay
+# inline: the entry file IS the orchestration skeleton.
+set -uo pipefail
+die(){ echo "run-v-packs: $*" >&2; exit 1; }
+
+# Portability guard (P1, 2026-07-02): this runner is developed against bash 4+. Under a MINIMAL PATH
+# (cron/automation) the shebang's `env bash` can resolve to macOS stock /bin/bash 3.2. The script now PARSES
+# under 3.2 (the deferred-arm apostrophe-splice that crashed its parser was removed), but re-exec under a
+# newer bash when one is on a well-known path so any residual 4+-only runtime behavior is safe too. A parse
+# error would abort BEFORE this line, so reaching here means we parsed OK; this only upgrades the runtime.
+# Only on DIRECT execution (BASH_SOURCE==$0), never when a test sources this file — a `source` under 3.2 must
+# not re-exec (it would run the wrong $0 / clobber the sourcing shell); the tests source it under bash 4+ anyway.
+if [ "${BASH_SOURCE[0]}" = "${0}" ] && [ -z "${_VPACKS_REEXEC:-}" ] && [ "${BASH_VERSINFO:-0}" -lt 4 ]; then
+  for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if [ -x "$_b" ]; then export _VPACKS_REEXEC=1; exec "$_b" "$0" "$@"; fi
+  done
+fi
+
+# Self-path for re-invocation (multi-batch sequential mode spawns one FULL child run per batch). Captured
+# at file scope: on direct execution this equals $0, but when a test harness `source`s this file $0 is the
+# harness (or bare `bash`) — BASH_SOURCE[0] is the only handle that points at THIS file in both cases.
+_VPACKS_SELF="${BASH_SOURCE[0]}"
+
+# ── tunables ──────────────────────────────────────────────────────────────────
+PACK_MAX_BYTES=25000   # a single pack is ~5-9KB; a much bigger /v file is a concatenated bundle, not one pack
+_PACK_TIMEOUT_FROM_ENV=0; [ -n "${PACK_TIMEOUT:-}" ] && _PACK_TIMEOUT_FROM_ENV=1   # V-4b: an explicit env pin must never be auto-scaled over
+PACK_TIMEOUT="${PACK_TIMEOUT:-4500}"   # per-pack wall-clock ceiling, SECONDS (75 min SERIAL default). A real /v
+                                       # gauntlet run is ~35-50 min serial; a session still alive past this is
+                                       # wedged (stuck subagent / rate-limit stall) and must be killed so it can't
+                                       # hold its parallel slot forever. Override: PACK_TIMEOUT=<sec> env, or the
+                                       # --timeout <MIN> flag. Under -j>1 with NO explicit pin, _parse_args
+                                       # auto-scales this to 9000 (150 min) — see V-4b there.
+# T4-F2 (2026-07-02 wave-4 forensic): PIN the fleet main-loop model. Headless packs used to inherit the
+# user's INTERACTIVE default model — when that default became Fable, the /v parent loop contributed ZERO
+# turns (live specimen: the fork did real sonnet-5 work, wrote both pack deliverables, then
+# the Fable parent closed at num_turns=0 without verify-done/commit/attest → the pack no-op'd; a prior note had
+# already flagged the class: some interactive-default models refuse the /v role, so pin sonnet). The fleet model is
+# a property of the RUNNER, not of whatever the user last picked interactively. Override: V_PACK_MODEL env
+# or --model <name>; the special value `inherit` restores the old un-pinned behavior.
+PACK_MODEL="${V_PACK_MODEL:-sonnet}"
+
+# ── modular libraries ─────────────────────────────────────────────────────────
+# Cohesive function GROUPS are factored into run-v-packs-lib/*.sh (mirrors ~/.claude/hooks/lib/). They are
+# SOURCED here — not exec'd — so the single-file entry point (`run-v-packs <dir>`, the operator's muscle
+# memory) is unchanged AND every `source run-v-packs` in the test harnesses transitively defines the whole
+# API. Placed AFTER the 3.2 re-exec guard so libs load under the upgraded bash on a direct run, and AFTER
+# the tunables so a lib may read them at source time if ever needed. Load order is deterministic (numeric
+# filename prefix, shell glob sort). A missing/empty dir is a silent no-op AT SOURCE TIME (so `source
+# run-v-packs` in the test harnesses always defines the rest of the inline API regardless of lib presence —
+# sourcing must never `exit`, it would kill the sourcing shell mid-file and undefine everything after this
+# point). Currently sourced: 10-discovery.sh (pack discovery + wave parsing + count/format helpers),
+# 20-git-landing.sh (default-branch resolution + "is there unlanded work?" helpers).
+# QA-001 (2026-07-04): the silent no-op is NOT safe at RUN time — a missing/incomplete lib leaves main()
+# calling undefined discovery functions, which bash reports as non-fatal "command not found" on stderr, and
+# callers like list_all_packs (read via `[ -z "$(...)" ]` / count context) then silently see "zero packs" —
+# a live-fired repro showed a real non-empty pack dir misreported as packs=0, exit 0, instead of a hard
+# error. So the completeness check lives at the START of main() (see below), not here: it fires only on
+# actual direct execution (`main` is called solely under the `BASH_SOURCE[0]==$0` guard at EOF), never
+# during a harness's `source`, preserving both "tests still see the full inline API with lib absent" AND
+# "a real invocation with a broken/missing lib dies loudly instead of misreporting."
+_RVP_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run-v-packs-lib"
+if [ -d "$_RVP_LIB_DIR" ]; then
+  for _rvp_lib in "$_RVP_LIB_DIR"/*.sh; do
+    [ -e "$_rvp_lib" ] || continue   # no-match glob under `set -u` stays literal; skip it
+    # shellcheck source=/dev/null
+    . "$_rvp_lib"
+  done
+  unset _rvp_lib
+fi
+
+# ── main() helpers (Phase 6, 2026-07-04): main()'s own skeleton, factored for navigability. ─────────
+# Each helper below is a VERBATIM lift of a contiguous main() block (forensic comments included); main()
+# calls them in the exact original order, so CONTROL FLOW IS UNCHANGED. They read/write the same globals
+# the inline blocks did (PACK_DIR/JOBS/DRY/ONCE/ARCHIVE/MAXTURNS/PACK_ABS/REPO/LOG_DIR/…); `die`/`exit`
+# inside a helper terminates the run exactly as it did inline (bash `exit` in a function exits the shell),
+# and traps armed inside a helper (EXIT in _acquire_lock, INT/TERM in _arm_dispatch) are shell-wide by
+# bash semantics — identical to when they were armed inline. _finish_report also folds the exit-code
+# derivation + self-audit summary (they share this block's locals: left/needs/_stranded/_needs_manual).
+# Kept INLINE (not a lib file): this is the entry point's own structure, not a reusable domain group.
+# _unlanded_branches/_drain_verdict_for (lib) read main()'s dynamically-scoped locals _drain_out/
+# _drain_last — helpers are ONLY ever called from main(), preserving that scope chain.
+
+_parse_args(){ # CLI → PACK_DIR/JOBS/DRY/ONCE/ARCHIVE/MAXTURNS (+PACK_MODEL/PACK_TIMEOUT overrides)
+  # args (all optional). JOBS=5 (parallel) is the default. --serial forces 1.
+  PACK_DIR=""; JOBS=5; DRY=0; ONCE=0; ARCHIVE=1; MAXTURNS=""; RESUME_PARKED="${V_RESUME_PARKED:-0}"
+  while [ $# -gt 0 ]; do case "$1" in
+    --serial)     JOBS=1 ;;
+    --once)       ONCE=1 ;;
+    --no-archive) ARCHIVE=0 ;;
+    --dry-run)    DRY=1 ;;
+    # --resume (2026-07-07): opt-in un-park. A pack parked in .needs-review/ (0-turn park, or a timeout
+    # whose fork DID real work left uncommitted in its worktree) is normally NOT re-run — so a batch whose
+    # closing wave stranded resumable work sits at exit 2 forever, the re-run doing nothing. --resume moves
+    # every parked pack back into the queue so THIS invocation re-attempts it; the per-pack RETRY-CONTINUITY
+    # contract then makes the new session ADOPT its own dead prior worktree (re-key the lock, finish the
+    # gauntlet, commit, merge) instead of re-implementing from scratch. Opt-in by construction (an operator
+    # chose to resume) so it can never silently re-wedge a run. Env: V_RESUME_PARKED=1.
+    --resume)     RESUME_PARKED=1 ;;
+    # CODEX-003: reject a flag-like value — a bare `--model --timeout 120` used to silently eat
+    # BOTH flags (PACK_MODEL='--timeout', the 120 became PACK_DIR) with no error until claude
+    # rejected the bogus model per-pack. A model name never starts with '-'.
+    --model)      shift; case "${1:-}" in ''|-*) die "bad --model: '${1:-}' (expects a model name, or 'inherit')" ;; *) PACK_MODEL="$1" ;; esac ;;
+    --max-turns)  shift; MAXTURNS="${1:-}" ;;
+    --timeout)    shift; case "${1:-}" in ''|*[!0-9]*) die "bad --timeout: '${1:-}' (expects whole MINUTES)" ;; *) { [ "$1" -ge 1 ] && [ "$1" -le 1440 ]; } || die "--timeout out of range: '$1' (allowed 1-1440 minutes)"; PACK_TIMEOUT=$(( $1 * 60 )); PACK_TIMEOUT_SET_BY_USER=1 ;; esac ;;
+    -j)  shift; JOBS="${1:-5}" ;;
+    -j*) JOBS="${1#-j}" ;;
+    -h|--help) awk 'NR==1{next}/^#/{sub(/^# ?/,"");print;next}{exit}' "$0"; exit 0 ;;
+    --) shift; PACK_DIR="${1:-}" ;;
+    -*) die "unknown flag: $1 (try --help)" ;;
+    *)  PACK_DIR="$1" ;;
+  esac; shift; done
+  [ -n "$PACK_DIR" ] || die "usage: run-v-packs <pack-dir>   — just point it at a folder of packs"
+  case "$JOBS" in ''|*[!0-9]*) JOBS=5 ;; esac; [ "$JOBS" -ge 1 ] || JOBS=1; [ "$JOBS" -le 5 ] || JOBS=5   # hard max 5
+  [ -z "$MAXTURNS" ] || case "$MAXTURNS" in *[!0-9]*) die "bad --max-turns: '$MAXTURNS'" ;; esac
+  # V-4b (2026-07-12 forensic, a live run): the V-4 advisory ("consider --timeout 150") was printed and
+  # IGNORED in the wild — that run's default 75-min ceiling under -j5 timeout-killed 2 packs mid-gauntlet
+  # (each fully re-run: ~150 wasted minutes) and produced 3 more "landed then crashed near completion"
+  # verdicts. The default is a property of the MODE: concurrent full gauntlets contend for CPU and
+  # routinely outlive a serial ceiling, so parallel mode gets the ceiling the advisory already recommended.
+  # Auto-scale ONLY the untouched default — an explicit --timeout or PACK_TIMEOUT env pin always wins
+  # (multi-batch child runs inherit the parent's already-scaled value via env, so they never double-scale).
+  if [ "$JOBS" -gt 1 ] && [ -z "${PACK_TIMEOUT_SET_BY_USER:-}" ] && [ "${_PACK_TIMEOUT_FROM_ENV:-0}" != 1 ] \
+     && [ "${PACK_TIMEOUT:-4500}" -le 4500 ] 2>/dev/null; then
+    PACK_TIMEOUT=9000; PACK_TIMEOUT_AUTOSCALED=1; export PACK_TIMEOUT_AUTOSCALED
+  fi
+}
+
+_preflight_and_dirs(){ # tool checks; resolve PACK_ABS/REPO; create LOG_DIR/DONE_DIR/NEEDS_DIR
+  # preflight
+  command -v git >/dev/null || die "git not found"
+  command -v jq  >/dev/null || die "jq not found — needed to detect clean completion (brew install jq)"
+  [ "$DRY" = 1 ] || command -v claude >/dev/null || die "claude CLI not on PATH"
+  [ -d "$PACK_DIR" ] || die "no such dir: $PACK_DIR"
+  PACK_ABS="$(cd "$PACK_DIR" && pwd)" || die "cannot resolve $PACK_DIR"
+  REPO="$(git -C "$PACK_ABS" rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$REPO" ] || die "'$PACK_DIR' is not inside a git repo"
+  git -C "$REPO" worktree prune 2>/dev/null || true   # tidy any stale worktree registrations from prior runs
+
+  # ── MULTI-BATCH GUARD (2026-07-11): a dir holding SEVERAL batch roots (subdirs with their own
+  # 00-README.md) is run-v-packs pointed one level too high (observed live: .v-prompt-packs/ holding 4 dated
+  # batches). Discovery is depth-2, so ALL their packs would merge into ONE run: waves interleave by bare
+  # prefix number across unrelated batches (w1 of batch A gating w2 of batch B — a dependency that does not
+  # exist; unprefixed packs of every batch all land in wave 0 together), and only the lexicographically-first
+  # 99-verify pack runs — the other batches silently lose their GO/NO-GO gate. Refuse BEFORE creating any
+  # runner dirs here, and print the safe per-batch loop. DONE-*/hidden dirs are skipped (a finished batch
+  # parked next to a live one is normal); wave-N/ subfolders never carry a 00-README.md, so a single batch
+  # with wave subfolders can never trip this. Override: V_PACK_ALLOW_MULTI_BATCH=1 (waves WILL interleave).
+  local _mb_names="" _mb_n=0 _mb_d _mb_b
+  for _mb_d in "$PACK_ABS"/*/; do
+    [ -d "$_mb_d" ] || continue
+    _mb_b="$(basename "$_mb_d")"
+    case "$_mb_b" in .*|DONE-*) continue ;; esac
+    [ -f "${_mb_d}00-README.md" ] || continue
+    _mb_names="${_mb_names}${_mb_b}
+"; _mb_n=$((_mb_n+1))
+  done
+  if [ "$_mb_n" -ge 2 ]; then
+    if [ "${V_PACK_ALLOW_MULTI_BATCH:-0}" = 1 ]; then
+      echo "⚠ MULTI-BATCH root: proceeding on $_mb_n batch dirs because V_PACK_ALLOW_MULTI_BATCH=1 — their waves WILL interleave and only ONE 99-verify gate runs."
+      # (the pre-run _conflict_gate in main() lints this same root next — its batch expansion classifies
+      # cross-batch overlaps correctly, so the override path always gets the full cross-batch report too)
+    elif [ "${V_PACK_MULTI_BATCH_SEQ:-1}" = 1 ] && [ -z "${_VPACKS_MB_CHILD:-}" ]; then
+      # AUTO-SEQUENTIAL (2026-07-11, operator request): the refusal below used to print the safe per-batch
+      # loop for the OPERATOR to run by hand — automate exactly that loop instead (detect → lint/resolve →
+      # execute, no human in the loop). Never returns. The _VPACKS_MB_CHILD guard keeps a CHILD batch run
+      # that itself turns out to be a nested multi-batch root from recursing — it falls through to the
+      # refusal branch instead (a batch-inside-a-batch is a layout error a human has to untangle).
+      _multi_batch_sequential "$_mb_names" "$_mb_n"
+    else
+      echo "⛔ '$PACK_DIR' is a MULTI-BATCH root — it holds $_mb_n separate batches (each subdir has its own 00-README.md):"
+      printf '%s' "$_mb_names" | sed 's/^/      /'
+      echo "   One combined run would INTERLEAVE their waves (w1 of one batch gating w2 of another) and run only ONE of their 99-verify gates."
+      echo "   Run each batch on its own instead:"
+      echo "      for b in $(printf '%s' "$_mb_names" | tr '\n' ' '); do run-v-packs \"$PACK_ABS/\$b\" || break; done"
+      # ALWAYS lint on detection (2026-07-11, operator request): the refusal used to exit BEFORE the
+      # pre-run conflict gate, so the operator saw "run them sequentially" without learning that the
+      # batches duplicate/contradict each other — and would discover the cross-batch collisions only
+      # mid-run. Running the lint here (fail-open, honors the same V_PACK_CONFLICT_CHECK/SCRIPT knobs)
+      # puts the DUPLICATE / SAME-WAVE / CROSS-BATCH report in the same breath as the sequential-loop
+      # advice, so the batches can be de-conflicted BEFORE the first one launches.
+      local _mb_ccs="${V_PACK_CONFLICT_SCRIPT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts/check-pack-conflicts.sh}"
+      if [ "${V_PACK_CONFLICT_CHECK:-1}" = 1 ] && [ -f "$_mb_ccs" ]; then
+        echo ""
+        echo "   ── cross-batch conflict lint across these $_mb_n batches (fix ✗ findings BEFORE running them back-to-back) ──"
+        bash "$_mb_ccs" "$PACK_ABS" 2>&1 | sed 's/^/     /' || true
+      fi
+      die "multi-batch root refused (auto-sequential is the default — this refusal means V_PACK_MULTI_BATCH_SEQ=0 is set or a CHILD batch is itself a nested multi-batch root; for one combined interleaved run: V_PACK_ALLOW_MULTI_BATCH=1)"
+    fi
+  fi
+
+  LOG_DIR="$PACK_ABS/.runlogs"; mkdir -p "$LOG_DIR"; [ -e "$LOG_DIR/.gitignore" ] || printf '*\n' >"$LOG_DIR/.gitignore" 2>/dev/null || true
+  DONE_DIR="$PACK_ABS/.done";   mkdir -p "$DONE_DIR"; [ -e "$DONE_DIR/.gitignore" ] || printf '*\n' >"$DONE_DIR/.gitignore" 2>/dev/null || true
+  # Parked packs: exited clean but did 0 turns + emitted no terminal token (already-done-without-attest, or a
+  # headless /v that stalled). NOT re-run (discovery skips dot-dirs) and NOT archived as done — held for a human.
+  NEEDS_DIR="$PACK_ABS/.needs-review"; mkdir -p "$NEEDS_DIR"; [ -e "$NEEDS_DIR/.gitignore" ] || printf '*\n' >"$NEEDS_DIR/.gitignore" 2>/dev/null || true
+
+  # ── --resume / V_RESUME_PARKED (2026-07-07): un-park resumable packs back into the queue ──────────
+  # WHY: a parked pack is deliberately NOT auto-re-run (a genuinely-wedged pack must not re-wedge the run).
+  # But that turns a batch whose CLOSING wave stranded real-but-uncommitted work into a permanent exit-2
+  # deadlock: the park blocks the wave-landing barrier, the re-run skips the parked pack, nothing moves.
+  # --resume is the operator's explicit "re-attempt these" — move every parked *.txt/*.md back to the pack
+  # root so discovery picks it up THIS run. Runs BEFORE the lock, the pre-run barrier, and queue discovery.
+  # A collision (same-named pack already queued) is left in .needs-review/ and reported, never clobbered.
+  if [ "${RESUME_PARKED:-0}" = 1 ] && [ "$DRY" != 1 ]; then
+    _rz=0
+    for _pf in "$NEEDS_DIR"/*.txt "$NEEDS_DIR"/*.md; do
+      [ -e "$_pf" ] || continue
+      _pb="$(basename "$_pf")"
+      if [ -e "$PACK_ABS/$_pb" ]; then
+        echo "  ⏭ --resume: '$_pb' already present in the queue — leaving the parked copy in .needs-review/ (resolve manually)"; continue
+      fi
+      if mv -f "$_pf" "$PACK_ABS/$_pb" 2>/dev/null; then
+        _rz=$((_rz+1)); echo "  ↩ --resume: re-queued parked pack '$_pb' (.needs-review/ → queue) — its dead prior worktree will be ADOPTED via retry-continuity, not redone"
+      else
+        echo "  ⚠ --resume: could not re-queue '$_pb' (mv failed) — move it manually: mv '$_pf' '$PACK_ABS/'"
+      fi
+    done
+    [ "$_rz" -gt 0 ] && echo "  ↩ --resume: re-queued $_rz parked pack(s); resuming them this run" || echo "  ↩ --resume: no parked packs to re-queue (.needs-review/ empty)"
+  fi
+}
+
+_multi_batch_sequential(){ # $1=newline batch basenames $2=count — run each batch as its OWN full child run, oldest-first; NEVER RETURNS
+  # WHY (2026-07-11, operator request): sequential per-batch execution preserves EVERY safety property the
+  # multi-batch refusal existed to protect — no wave interleaving across unrelated batches, every batch keeps
+  # its own 99-verify GO/NO-GO, per-batch locks/logs/archives — so automating the loop the refusal used to
+  # print loses nothing and removes the human from a step that was already deterministic.
+  # ORDER: oldest 00-README.md mtime first (name as tiebreak). Older batches were authored blind to newer
+  # ones; the newer packs are the ones that anticipate their siblings (observed live 2026-07-11: a feature
+  # batch's wave-1 pack explicitly builds on files an older batch's packs also touch), so the most-aware
+  # batch lands LAST, on top of the state it expects. CROSS-BATCH '## Files' overlaps do NOT block this
+  # mode: sequential execution is the conflict lint's own standing remedy (each later /v session reads the
+  # file state its predecessors landed — see check-pack-conflicts.sh CROSS-BATCH doc). EXACT duplicate packs
+  # ARE auto-resolved: the lint's --quarantine parks every later copy in its batch's .needs-review/
+  # (recoverable, zero information lost — identical bodies). Batch-INTERNAL findings (SAME-WAVE, MULTI-99)
+  # are NOT fixable by sequencing: warn-only by default, blocking under V_PACK_CONFLICT_GATE=1 — the exact
+  # policy _conflict_gate applies to a single batch. STOP-ON-FAILURE: a batch exiting nonzero stops the
+  # chain BEFORE later batches (they may build on its landed work), mirroring the wave-landing barrier's
+  # stop-before-dependents rule; re-running the same command resumes — a cleanly-finished batch was
+  # DONE-renamed (or its queue drained to .done/) so multi-batch detection no longer counts it.
+  local _names="$1" _n="$2" _ordered _b _f _mt _ccs _qflag _out _i _rc _self
+  echo "▶ MULTI-BATCH root: '$PACK_DIR' holds $_n batches — running them SEQUENTIALLY, oldest 00-README.md first (old refusal: V_PACK_MULTI_BATCH_SEQ=0; ONE combined interleaved run: V_PACK_ALLOW_MULTI_BATCH=1):"
+  _ordered="$(printf '%s' "$_names" | grep . | while IFS= read -r _b; do
+      _f="$PACK_ABS/$_b/00-README.md"
+      _mt="$(stat -c %Y "$_f" 2>/dev/null || stat -f %m "$_f" 2>/dev/null || echo 0)"
+      printf '%s\t%s\n' "$_mt" "$_b"
+    done | LC_ALL=C sort -n -k1,1 | cut -f2-)"
+  printf '%s\n' "$_ordered" | awk 'NF{printf "      %d. %s\n", NR, $0}'
+
+  # cross-batch lint + auto-resolution (same fail-open knobs as _conflict_gate; a missing lint never blocks)
+  _ccs="${V_PACK_CONFLICT_SCRIPT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts/check-pack-conflicts.sh}"
+  if [ "${V_PACK_CONFLICT_CHECK:-1}" = 1 ] && [ -f "$_ccs" ]; then
+    _qflag="--quarantine"; [ "$DRY" = 1 ] && _qflag=""   # --dry-run stays strictly read-only
+    echo "   ── cross-batch conflict lint (CROSS-BATCH overlaps are INFORMATIONAL here — sequential execution is their standing remedy; exact duplicates auto-quarantined$([ -n "$_qflag" ] || echo ' — skipped under --dry-run')) ──"
+    _out="$(bash "$_ccs" $_qflag "$PACK_ABS" 2>&1)" || true
+    printf '%s\n' "$_out" | sed 's/^/     /'
+    if printf '%s\n' "$_out" | grep -q 'SAME-WAVE COLLISION\|MULTI-99'; then
+      if [ "${V_PACK_CONFLICT_GATE:-0}" = 1 ]; then
+        die "pack-conflict gate: batch-INTERNAL collisions above (SAME-WAVE / MULTI-99) are not fixed by sequencing (V_PACK_CONFLICT_GATE=1) — re-wave or merge those packs, then re-run."
+      fi
+      echo "   ⚠ batch-INTERNAL collisions above (SAME-WAVE / MULTI-99) are NOT fixed by sequencing — the affected batch's own pre-run lint warns again; make this blocking with V_PACK_CONFLICT_GATE=1."
+    fi
+  fi
+
+  # execute: one FULL child runner per batch, inheriting this invocation's flags; stop at the first nonzero exit
+  _self="${_VPACKS_SELF:-$0}"; _i=0
+  while IFS= read -r _b; do
+    [ -n "$_b" ] || continue
+    _i=$((_i+1)); echo ""; echo "═══ BATCH $_i/$_n: $_b ═══"
+    set -- -j"$JOBS"
+    [ "$ONCE" = 1 ]               && set -- "$@" --once
+    [ "$ARCHIVE" = 0 ]            && set -- "$@" --no-archive
+    [ "$DRY" = 1 ]                && set -- "$@" --dry-run
+    [ "${RESUME_PARKED:-0}" = 1 ] && set -- "$@" --resume
+    [ -n "$MAXTURNS" ]            && set -- "$@" --max-turns "$MAXTURNS"
+    # </dev/null: the loop's stdin IS the heredoc batch list — a child left on that stdin could consume
+    # the remaining lines and silently truncate the chain (classic read-loop stdin leak).
+    PACK_TIMEOUT="$PACK_TIMEOUT" V_PACK_MODEL="${PACK_MODEL:-inherit}" _VPACKS_MB_CHILD=1 \
+      bash "$_self" "$@" "$PACK_ABS/$_b" </dev/null
+    _rc=$?
+    if [ "$_rc" -ne 0 ]; then
+      echo "⛔ batch '$_b' exited rc=$_rc — stopping BEFORE the remaining batch(es) (they may build on this one's landed work):"
+      printf '%s\n' "$_ordered" | awk -v i="$_i" 'NF && NR>i {printf "      not run: %s\n", $0}'
+      echo "   Clear the blocker (see the batch report above), then re-run the SAME command — finished batches are skipped automatically."
+      exit "$_rc"
+    fi
+  done <<EOF
+$_ordered
+EOF
+  echo ""; echo "✅ multi-batch run complete: all $_n batches finished cleanly (each ran its own waves + its own 99-verify gate)."
+  exit 0
+}
+
+_acquire_lock(){ # single-runner lock + stale reclaim + crash-recovery orphan adoption; no-op under --dry-run
+  # ── single-runner lock (per dir) ───────────────────────────────────────────
+  # TWO run-v-packs on one dir is the contention that stranded a run for hours: they double the API load (hit the
+  # usage limit ~2x faster) and their packs race the same worktrees + the merge-to-main lock. Refuse a second
+  # concurrent runner; reclaim a STALE lock (holder pid dead, or the pid was recycled onto a non-run-v-packs
+  # process). --dry-run is read-only and never locks. The die() happens BEFORE the EXIT trap is armed, so a
+  # refused second runner can never delete the first runner's lock.
+  LOCK="$LOG_DIR/.runlock"   # under .runlogs/ (gitignored); dot-path, so pack discovery ignores it
+  if [ "$DRY" != 1 ]; then
+    if [ -f "$LOCK" ]; then
+      oldpid="$(head -1 "$LOCK" 2>/dev/null | tr -dc '0-9')"
+      if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null && ps -o command= -p "$oldpid" 2>/dev/null | grep -q 'run-v-packs'; then
+        die "another run-v-packs (pid $oldpid) is already running on $PACK_DIR — one runner per dir (two double the API load and collide on worktrees). Let it finish, or stop it:  kill $oldpid   (if that pid is NOT actually a runner — a kill -9 can leave a stale lock — clear it:  rm $LOCK)"
+      fi
+      echo "  note: reclaiming a stale lock (pid ${oldpid:-?} is not a running run-v-packs)"
+    fi
+    echo "$$" >"$LOCK" 2>/dev/null || true
+    trap 'rm -f "$LOCK" 2>/dev/null' EXIT
+    # CRASH RECOVERY: safe to run ONLY here — we just proved we are the SOLE runner for this dir (a live
+    # sibling would have refused our lock above), so any pidfile-named process still alive at this point
+    # cannot belong to a currently-running peer; it can only be an orphan left by a runner that died.
+    _adopt_orphans
+  fi
+}
+
+_arm_dispatch(){ # build CLAUDE_ARGS; arm the INT/TERM kill-tree trap
+  CLAUDE_ARGS=( -p --permission-mode bypassPermissions --output-format stream-json --verbose )
+  [ -n "$MAXTURNS" ] && CLAUDE_ARGS+=( --max-turns "$MAXTURNS" )
+  # T4-F2: pin the fleet model unless explicitly disabled (`inherit`). See the PACK_MODEL tunable header.
+  case "${PACK_MODEL:-inherit}" in inherit|'') : ;; *) CLAUDE_ARGS+=( --model "$PACK_MODEL" ) ;; esac
+
+  # On interrupt, kill each backgrounded run_pack subshell AND its claude child (pkill -P) so no headless
+  # claude session is orphaned to keep burning quota after we exit.
+  # Kill THREE levels on interrupt: each backgrounded run_pack subshell ($p), its claude child ($c, found via
+  # pgrep -P), AND claude's OWN children (the subagents it spawned) — `pkill -P "$c"`. The old trap killed only
+  # $p's direct child, so subagents dispatched by claude were orphaned and kept burning quota after we exited
+  # (the same leak the per-pack watchdog's `pkill -P "$cpid"` already prevents on a timeout kill).
+  # KNOWN LIMIT (R2, empirically verified): when this script is itself launched ASYNC/detached (nohup, cron,
+  # launchd, `... &` from a non-interactive shell), bash sets SIGINT to SIG_IGN before we start and a
+  # non-interactive script cannot trap a signal ignored at entry (POSIX) — so `kill -INT` is silently dropped
+  # there. SIGTERM is NOT pre-ignored and runs this same trap; the --help header tells operators to use
+  # `kill <pid>` for detached runs. Interactive Ctrl-C works normally.
+  trap 'echo; echo "⏹ stopped — re-run the SAME command to resume (finished packs are archived)."; jobs -p | while read -r p; do for c in $(pgrep -P "$p" 2>/dev/null); do pkill -P "$c" 2>/dev/null; kill "$c" 2>/dev/null; done; pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; done; exit 130' INT TERM
+}
+
+_clamp_concurrency(){ # live-PID sibling census; warn + clamp JOBS to the V_CONCURRENCY_CAP budget
+  # P2-B (2026-07-01): CONCURRENCY advisory. Over-parallelization is the root efficiency loss — beyond ~5-8
+  # concurrent /v sessions, shared-main contention DEFERS every merge (strands fixes) and inflates subprocess
+  # dispatch cost via timeout→retry (observed under 34 live procs). Count LIVE sibling worktree
+  # sessions by OWNING PID (not the flaky mtime heuristic) and warn before piling a fleet on top.
+  # Placed BEFORE the summary line + dry-run branch so the mode= line and --dry-run report the EFFECTIVE
+  # (clamped) parallelism, not the requested one.
+  # FB-24 (forensic 2026-07-03): TWO worktree-root conventions coexist (<repo>/.worktrees/ AND
+  # ~/.claude/worktrees/<repo-basename>/ — the P12 mixed-root class). A Jul-3 fleet run's
+  # sessions lived almost entirely under the ~/.claude root, so a repo-local-only scan counted 0 live
+  # sessions while 6+ were running. Scan BOTH roots.
+  # FB-24b (2026-07-11, live repro): ONE session is routinely registered under BOTH roots (the repo-local
+  # .worktrees/ path and the ~/.claude/worktrees/ mirror carry the SAME owning pid) — counting lock FILES
+  # doubled the census (3 live sessions read as 6) and over-clamped JOBS 5→1 for no real contention.
+  # De-dupe by owning PID: one live pid = one session, however many lock files point at it.
+  _active_v=0; _seen_v_pids=" "
+  for _lk in "$REPO"/.worktrees/*/.claude-session-lock "$REPO"/.worktrees/*/*/.claude-session-lock \
+             "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/worktrees/$(basename "$REPO")"/*/.claude-session-lock; do
+    [ -f "$_lk" ] || continue
+    _p="$(awk 'NR==1{print $2}' "$_lk" 2>/dev/null)"; case "$_p" in ''|*[!0-9]*) continue ;; esac
+    case "$_seen_v_pids" in *" $_p "*) continue ;; esac
+    kill -0 "$_p" 2>/dev/null && { _active_v=$((_active_v+1)); _seen_v_pids="${_seen_v_pids}${_p} "; }
+  done
+  if [ "$_active_v" -ge "${V_CONCURRENCY_WARN:-8}" ]; then
+    echo "⚠ CONCURRENCY: $_active_v live /v worktree session(s) already active in $(basename "$REPO"). Past ~5-8, shared-main contention strands merges + inflates subprocess-timeout cost. This runner caps ITS OWN parallelism at ≤$JOBS — consider fewer concurrent INTERACTIVE sessions too."
+  fi
+  # FND-CLAMP (forensic 2026-07-03): the warning alone was ignored in the wild — bootstrap observed 13
+  # parallel /v sessions on one repo, where EVERY merge deferred, QA dispatches were killed by timeout,
+  # and ~60-70% of turns went to contention remediation. Enforce the known 5-8 sweet spot: clamp THIS
+  # runner's JOBS so (live sessions + JOBS) stays within V_CONCURRENCY_CAP (default 6). Never below 1
+  # (the runner always makes progress); V_CONCURRENCY_CLAMP=0 restores warn-only behavior.
+  if [ "${V_CONCURRENCY_CLAMP:-1}" = 1 ] && [ "$_active_v" -gt 0 ] && [ $((_active_v + JOBS)) -gt "${V_CONCURRENCY_CAP:-6}" ]; then
+    _nj=$(( ${V_CONCURRENCY_CAP:-6} - _active_v )); [ "$_nj" -ge 1 ] || _nj=1
+    if [ "$_nj" -lt "$JOBS" ]; then
+      echo "⚠ CONCURRENCY CLAMP: $_active_v live /v session(s) already active — reducing this run's parallelism: JOBS $JOBS → $_nj (cap ${V_CONCURRENCY_CAP:-6}; override with V_CONCURRENCY_CAP=<n> or V_CONCURRENCY_CLAMP=0)."
+      JOBS="$_nj"
+    fi
+  fi
+}
+
+_emit_run_banner(){ # repo/packs/waves/mode line + dirty-tree, oversized-pack, wave-order, dup-verify warnings
+  local wlist mode; wlist="$(waves_present | tr "\n" " ")"
+  if [ "$JOBS" -le 1 ]; then mode="serial"; else mode="parallel:$JOBS (per-pack pinned session-id)"; fi
+  echo "repo=$REPO  branch=$(git -C "$REPO" symbolic-ref --short HEAD 2>/dev/null || echo DETACHED)  packs=$(count_left)  waves=[${wlist% }]  mode=$mode  model=${PACK_MODEL:-inherit}"
+  [ -z "$(git -C "$REPO" status --porcelain 2>/dev/null)" ] || echo "  note: working tree is dirty — /v merges to your branch itself, so a clean tree gives cleaner results"
+  # V-4 (2026-07-06 forensics) → V-4b (2026-07-12): under -j>1 the old DEFAULT 75-min ceiling was
+  # structurally short for full-gauntlet packs — concurrent full pest+vitest+build suites contend for CPU
+  # and each session's gauntlet stretches well past a serial run's (live batch: 3 of 4 worktree sessions
+  # were timeout-killed at 93-99% completion, one 44s after its PRE_FLIGHT PASS was written). The advisory
+  # printed here was demonstrably ignored (the next run repeated the exact class), so _parse_args now
+  # AUTO-SCALES the untouched default to 150 min in parallel mode; this line just reports which case holds.
+  if [ -n "${PACK_TIMEOUT_AUTOSCALED:-}" ]; then
+    echo "  note: parallel mode (-j$JOBS) → per-pack ceiling auto-raised to $((PACK_TIMEOUT/60)) min (concurrent gauntlets contend; the old 75-min default killed sessions near completion). Pin your own with --timeout <min> or PACK_TIMEOUT=<sec>."
+  elif [ "$JOBS" -gt 1 ] && [ "${PACK_TIMEOUT:-4500}" -le 4500 ] 2>/dev/null; then
+    echo "  ⚠ parallel mode with an explicitly pinned $((PACK_TIMEOUT/60))-min per-pack ceiling: concurrent full gauntlets contend and routinely outlive it (sessions get killed near completion). Consider --timeout 150 (or PACK_TIMEOUT=9000), or -j 1 for gauntlet-heavy packs."
+  fi
+
+  # loud warning for non-standard concatenated bundles (NOT silently skipped)
+  local big; big="$(oversized_packs)"
+  [ -z "$big" ] || { echo "  ⚠ skipping non-pack /v file(s) over $((PACK_MAX_BYTES/1000))KB — looks like a concatenated bundle, not one pack. Split into per-pack files:"; printf '%s\n' "$big" | awk -F'\t' '{printf "      %dKB  %s\n",$1/1000,$2}'; }
+
+  # T4-F1: never let an out-of-order single-wave invocation be silent (advisory; see function header)
+  warn_skipped_lower_waves
+
+  # P2 (2026-07-02): a run has exactly ONE final VERIFY pack (99-*). If more than one exists, only the
+  # lexicographically-first runs last — warn loudly and list the rest so the extras are never silently skipped.
+  local _vps _nvp; _vps="$(list_verify_packs)"; _nvp="$(printf '%s\n' "$_vps" | grep -c .)"
+  if [ "${_nvp:-0}" -gt 1 ]; then
+    echo "  ⚠ ${_nvp} VERIFY (99-*) packs found — only the FIRST runs last; the rest are IGNORED (merge them into one 99-verify pack, or renumber the extras into earlier waves):"
+    printf '%s\n' "$_vps" | sed "s@^$PACK_ABS/@      @"
+  fi
+}
+
+_conflict_gate(){ # pre-run pack-conflict lint (check-pack-conflicts.sh): warn by default, block on V_PACK_CONFLICT_GATE=1
+  # WHY (2026-07-11): FND-DUP de-dupes only at DISPATCH time (identical body / same wave-stripped slug inside
+  # THIS run) and nothing compared pack INSTRUCTIONS across the queue — two packs declaring the same
+  # '## Files' target in one wave run in PARALLEL and race on merge (a live scan of a real 4-batch queue
+  # found 24 such collisions), and cross-batch pairs can flatly contradict each other. The lint intersects
+  # DECLARED scopes only (deterministic, no LLM, ~a second). Fail-open by design: a missing or broken lint
+  # script must never block a run — none of the runner's own safety properties depend on it. Runs under
+  # --dry-run too: a plan built on a colliding queue is exactly what the preview should surface.
+  [ "${V_PACK_CONFLICT_CHECK:-1}" = 1 ] || return 0
+  local _ccs _out _rc
+  _ccs="${V_PACK_CONFLICT_SCRIPT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts/check-pack-conflicts.sh}"
+  [ -f "$_ccs" ] || return 0
+  _out="$(bash "$_ccs" "$PACK_ABS" 2>&1)"; _rc=$?
+  case "$_rc" in
+    0) : ;;
+    1) if [ "${V_PACK_CONFLICT_GATE:-0}" = 1 ]; then
+         printf '%s\n' "$_out"
+         die "pack-conflict gate: the queue has duplicate/colliding packs (V_PACK_CONFLICT_GATE=1) — merge, re-wave, or de-dupe them (see the ✗ lines above), then re-run."
+       else
+         echo "⚠ PACK-CONFLICT LINT — queued packs collide (run continues; make this blocking with V_PACK_CONFLICT_GATE=1):"
+         printf '%s\n' "$_out" | sed 's/^/  /'
+       fi ;;
+    *) echo "  note: pack-conflict lint could not run (rc=$_rc) — continuing (fail-open)." ;;
+  esac
+}
+
+_dry_run_report(){ # --dry-run: report what would run (mirrors the real-run guards exactly), then exit
+    # BUGFIX (2026-07-02, found during a real /v-forensics-pack-runner forward-run verification):
+    # count_left() deliberately EXCLUDES the VERIFY-wave pack (list_all_packs skips wave=9999 by
+    # design -- it runs separately, after all other waves). The real (non-dry) run correctly checks
+    # BOTH `count_left -eq 0` AND `verify_pack` is empty before declaring "nothing to do" (see below,
+    # ~10 lines down); this dry-run branch only checked count_left, so a directory containing ONLY a
+    # remaining VERIFY pack (all other packs already landed) misreported "no packs found" even though
+    # a real run on the identical directory would still run it. Mirror the real-run guard exactly.
+    local v0; v0="$(verify_pack)"
+    if [ "$(count_left)" -eq 0 ] && [ -z "$v0" ]; then echo "no packs found (a pack is a .txt/.md whose first line is /v)"; explain_rejected_candidates; exit 0; fi
+    local w; for w in $(waves_present); do
+      echo "would run wave $w (≤$JOBS at a time):"; list_packs_in_wave "$w" | sed "s@^$PACK_ABS/@  @"
+    done
+    [ -n "$v0" ] && echo "  then VERIFY last: ${v0#"$PACK_ABS"/}"; exit 0
+}
+
+_run_verify_pack(){ # run the single 99-* VERIFY pack last (or say why it's skipped); a watchdog kill sets HAD_TIMEOUT
+  # VERIFY pack last, once every non-verify wave is drained AND landed. A blocked wave barrier skips
+  # verify: a GO/NO-GO judged against a main missing wave work is invalid-by-construction (observed
+  # live, T4-F1 — a NO-GO issued against features its earlier wave built but never landed).
+  local v vn _gcmd; v="$(verify_pack)"
+  if [ -n "$v" ] && [ "$(count_left)" -eq 0 ] && [ "${WAVE_BLOCKED:-0}" = 1 ]; then
+    echo "⏹ VERIFY pack skipped — wave work is not all on main (see the barrier report above); verifying an incomplete main would be invalid-by-construction. Clear the blockers and re-run; verify will run then."
+  elif [ -n "$v" ] && [ "$(count_left)" -eq 0 ]; then
+    vn="$(pack_name "$v")"; echo "═══ VERIFY: $vn ═══"; run_pack "$v" &
+    while [ "$(jobs -rp | wc -l | tr -d ' ')" -gt 0 ]; do _hb; sleep 60; done
+    # AR-2 (adversarial review): the VERIFY pack runs the fullest gauntlet closest to the ceiling — a
+    # watchdog kill HERE must arm the settle+re-drain (HAD_TIMEOUT) exactly like the wave loop does,
+    # or the photo-finish protection is defeated for the pack most likely to need it.
+    case "$(verdict "$vn")" in
+      done)    [ "$ARCHIVE" = 1 ] && mv -f "$v" "$DONE_DIR/" 2>/dev/null; echo "  ✓ verify passed" ;;
+      readonly-done) [ "$ARCHIVE" = 1 ] && mv -f "$v" "$DONE_DIR/" 2>/dev/null; echo "  ✓ verify passed (read-only)" ;;   # a read-only 99-* verify pack self-attested completion
+      # NO-HUMAN-2 (2026-07-04): a non-`done` VERIFY is the whole-run GO/NO-GO failing. count_left EXCLUDES the
+      # 99-* pack (wave 9999), and a failed verify is left in place (not parked), so without this flag the run
+      # exited 0 with "nothing outstanding" while the acceptance gate never passed. VERIFY_FAILED trips _rc=2.
+      timeout) HAD_TIMEOUT=1; VERIFY_FAILED=1; echo "  ⏱ verify TIMEOUT ($(_timeout_kind "$vn") at the ceiling) — killed; the end-of-run drain below will settle + retry landing, but the GO/NO-GO verdict did NOT complete. Log: $LOG_DIR/$vn.log" ;;
+      # VERIFY-GATE BACKSTOP (2026-07-07): the verify SESSION attested no verdict — the observed failure is a
+      # headless fork-park (0 turns, spawned background gate/bug-hunt subprocesses + a Monitor wait that never
+      # fires under `-p`, so it never emits the terminal V-COMPLETION-SELFCHECK token). That is NOT a product
+      # regression; the whole batch can be green while the verify session simply failed to collate a verdict.
+      # Before failing the run's GO/NO-GO, give the runner a DETERMINISTIC, fork-proof confirmation: if the
+      # verify pack declares a machine-readable gate command (`<!-- v-verify-gate: <cmd> -->`), RUN IT
+      # SYNCHRONOUSLY here (in the repo) and key the banner on its REAL exit code. SOUND BY CONSTRUCTION — a
+      # green banner requires the gates to POSITIVELY pass (a positive proof), never absence-of-signal: a truly
+      # red batch fails the command and VERIFY_FAILED still trips. The command is operator-authored (same trust
+      # as the pack the runner already drives `/v` on — no new code-exec boundary); it is echoed before running
+      # and its output captured to <vn>.gate.log for audit. No directive ⇒ the original behavior below.
+      *)
+        _gcmd="$(grep -oE '<!--[[:space:]]*v-verify-gate:.*-->' "$v" 2>/dev/null | head -1 | sed -E 's/^<!--[[:space:]]*v-verify-gate:[[:space:]]*//; s/[[:space:]]*-->[[:space:]]*$//')"
+        if [ -n "$_gcmd" ]; then
+          echo "  ⓘ verify session attested no verdict (headless fork-park / 0-turn) — runner re-running the pack's declared gate suite SYNCHRONOUSLY: $_gcmd"
+          if ( cd "$REPO" && eval "$_gcmd" ) >"$LOG_DIR/$vn.gate.log" 2>&1; then
+            [ "$ARCHIVE" = 1 ] && mv -f "$v" "$DONE_DIR/" 2>/dev/null
+            echo "  ✓ verify passed (session did not attest; runner re-ran the pack's declared gate suite — GREEN). Gate log: $LOG_DIR/$vn.gate.log"
+          else
+            VERIFY_FAILED=1
+            echo "  ✗ verify FAILED — the session attested no verdict AND the runner re-ran the pack's declared gate suite, which did NOT pass (RED). Gate log: $LOG_DIR/$vn.gate.log"
+          fi
+        else
+          VERIFY_FAILED=1
+          echo "  ✗ verify did NOT pass — the run's GO/NO-GO gate failed (session attested no verdict, and the pack declares no '<!-- v-verify-gate: … -->' command for the runner to re-run deterministically). See $LOG_DIR/$vn.log"
+        fi ;;
+    esac
+  fi
+}
+
+_final_sweep(){ # end-of-run landing drain + SESSION_LOG backlog report + merged-branch GC
+  # P2-A (2026-07-01): AUTO-LAND stranded fixes whose SESSION HAS ENDED. Parallel /v sessions defer merge-back on
+  # main-WIP contention, so finished fixes pile up unmerged (observed: 35 deferred markers; a P1 bug left off main
+  # AND still live). The drainer is PID-gated (never touches a LIVE worktree), mid-setup-guarded, and idempotent —
+  # and merge-back itself re-defers (exit 3) if main still carries live WIP, so this is safe as the batch winds
+  # down. Replaces the old "suggest a raw `git merge`" hint, which bypassed merge-back's lock+ownership guards.
+  # Opt out with V_PACK_DRAIN=0. This is the SAME landing pass the per-wave barrier runs (settle → drain →
+  # W-GATE re-drain → parked-pack reconciles) — kept as a final sweep because the VERIFY pack above is itself
+  # a /v session that can strand a worktree after the last wave's barrier already ran.
+  _land_and_reconcile
+  # P2-A2 (R17, 2026-07-01): surface this repo's SESSION_LOG_MISSING backlog at end-of-batch — DRY-RUN,
+  # REPORTS ONLY. The backfill driver is dry-run by default; we deliberately do NOT set V_SL_BACKFILL_ALL=1
+  # here (generating catch-up logs is a human-gated action, per the driver's own contract). Opt out with
+  # V_PACK_BACKFILL_CHECK=0. Additive + non-blocking (driver exits 0 always).
+  if [ "${V_PACK_BACKFILL_CHECK:-1}" = 1 ] && [ -f "$HOME/.claude/skills/v-session-log/references/v-session-log-backfill.sh" ]; then
+    echo "── SESSION_LOG_MISSING backlog (dry-run — reports only; run the driver with V_SL_BACKFILL_ALL=1 to generate) ──"
+    bash "$HOME/.claude/skills/v-session-log/references/v-session-log-backfill.sh" "$REPO" 2>&1 | sed 's/^/  /' || true
+  fi
+  # F2: sweep build/*|fix/* branch refs that are fully merged into main with zero commits ahead — debris left
+  # by a worktree whose OWN cleanup ran through some other path. Opt out with V_PACK_BRANCH_GC=0.
+  [ "${V_PACK_BRANCH_GC:-1}" = 1 ] && gc_merged_branches "$REPO"
+}
+
+_done_banner(){ # prominent ***** completion banner. $1 = headline line, $2 = optional sub-line
+  echo ""
+  echo "********************************************************************************"
+  echo "*****"
+  printf '*****   %s\n' "$1"
+  [ -n "${2:-}" ] && printf '*****     %s\n' "$2"
+  echo "*****"
+  echo "********************************************************************************"
+  echo ""
+}
+
+_maybe_rename_done(){ # on a TRULY-clean finish (_rc==0), prefix the pack-run dir with DONE- so a completed batch
+  # is visible at a glance and is not re-scanned. Opt out with V_PACK_DONE_RENAME=0. This is cosmetic bookkeeping
+  # that runs ONLY after exit-0 is derived, so it can never strand work or mask an outstanding item; the guards
+  # below exist purely so it never renames something that ISN'T a finished pack-run dir (the footgun: run-v-packs
+  # can be pointed at any dir, and a stray `mv` of a repo/home/worktree root would be catastrophic).
+  [ "${V_PACK_DONE_RENAME:-1}" = 0 ] && return 0                 # explicit opt-out
+  [ "${DRY:-0}" = 1 ] && return 0                                # never mutate under --dry-run
+  [ "${ARCHIVE:-1}" = 1 ] || return 0                            # --no-archive keeps the dir untouched too
+  local base parent; base="$(basename "$PACK_ABS")"; parent="$(dirname "$PACK_ABS")"
+  case "$base" in DONE-*) return 0 ;; esac                       # already marked — idempotent on re-run
+  # CATASTROPHE GUARD — never rename a repo/worktree/home/fs root, and never a dir that didn't actually archive a
+  # pack (an incidental/empty dir is indistinguishable from a real one except by whether packs landed in .done/).
+  [ "$PACK_ABS" = "$REPO" ] && return 0
+  [ "$PACK_ABS" = "$HOME" ] && return 0
+  [ "$PACK_ABS" = "/" ] && return 0
+  [ -e "$PACK_ABS/.git" ] && return 0                            # a git worktree/repo toplevel is not a pack folder
+  [ "$(count_done)" -gt 0 ] || return 0                          # nothing archived here ⇒ not a completed pack-run
+  # never bury acknowledged-quarantine work (2026-07-13): those packs are parked-but-non-blocking (rc stays 0),
+  # but a DONE- rename claims "fully complete; nothing left to run" and would hide work the operator explicitly
+  # HELD for interactive completion. Keep the dir visible until .needs-review/ is genuinely clear. Self-derive
+  # the needs dir from PACK_ABS (NEEDS_DIR may be stale/unset when a caller invokes this directly).
+  [ -d "$PACK_ABS/.needs-review" ] && [ "$(NEEDS_DIR="$PACK_ABS/.needs-review" count_needs_ack)" -gt 0 ] 2>/dev/null && return 0
+  [ -w "$parent" ] || return 0                                   # can't rename if the parent isn't writable
+  local dest="$parent/DONE-$base"
+  [ -e "$dest" ] && { echo "  (note: '$base' is fully finished but '$dest' already exists — not renaming; clear it by hand)"; return 0; }
+  if mv "$PACK_ABS" "$dest" 2>/dev/null; then
+    LOCK="$dest/.runlogs/.runlock"                               # keep the EXIT-trap rm pointed at the moved lock
+    PACK_ABS="$dest"; LOG_DIR="$dest/.runlogs"; DONE_DIR="$dest/.done"; NEEDS_DIR="$dest/.needs-review"
+    _done_banner "✓ FINISHED — pack-run dir renamed → DONE-$base/" "fully complete; nothing left to run"
+  fi
+  return 0
+}
+
+_finish_report(){ # final accounting: queue/parked/stranded report → exit-code derivation → self-audit summary → exit
+  local left; left="$(count_left)"
+  local needs; needs="$(count_needs)"                  # ACTIONABLE parked (excludes acknowledged quarantine)
+  local needs_ack; needs_ack="$(count_needs_ack)"      # operator-acknowledged, held for interactive completion
+  echo "── finished: $(count_done) pack(s) in .done/, ${needs} parked in .needs-review/, $left remaining ──"
+  [ "${needs_ack:-0}" -eq 0 ] 2>/dev/null || echo "  ✓ ${needs_ack} pack(s) quarantined (acknowledged in .needs-review/.acknowledged) — held for interactive completion; NOT blocking this run."
+  [ "$needs" -eq 0 ] || echo "  ⏭ ${needs} pack(s) parked in .needs-review/ (did 0 turns / timed out, no terminal token — NOT re-run). Verify each: already on main → mv it to .done/; genuinely unfinished → run it interactively (or, if deliberately held for later, add its name to .needs-review/.acknowledged)."
+  # P0-1 (2026-07-02 forensic): Surface worktree branches STILL unmerged after the drain, with their
+  # OWN truthful verdict — NOT a blanket "lands automatically once idle" (false for a branch the
+  # drain returned rc=2/failed on; that state is PERMANENT until fixed by hand, never self-resolving).
+  # No raw `git merge` hint — that bypassed merge-back's lock/ownership guards; the drainer above is
+  # the safe path.
+  # W-LAND: enumeration is shared with the wave barrier's gate (_unlanded_branches — R4 primary-worktree
+  # skip and per-branch drain verdicts included) so the report and the gate can never disagree.
+  local _stranded; _stranded="$(_unlanded_branches | while IFS=$'\t' read -r vd br n; do
+      [ -n "$br" ] || continue
+      # Leading "(" on each pattern: bash 3.2 misparses a bare "pattern)" inside $(...).
+      case "$vd" in
+        (failed)
+          printf '    ✗ %s — %s commit(s) NOT on main — NEEDS MANUAL (drain returned a hard failure for this branch; it will NOT resolve on its own — inspect %s or re-run: bash %s/skills/v/references/v-drain-deferred-merges.sh %s)\n' "$br" "$n" "$LOG_DIR" "$HOME/.claude" "$REPO"
+          ;;
+        (wgate)
+          printf '    ✗ %s — %s commit(s) NOT on main — BLOCKED at the W-GATE (a gauntlet artifact was missing at drain time; if the session was timeout-killed its reports may have flushed since — re-run: bash %s/skills/v/references/v-drain-deferred-merges.sh %s ; if still blocked, complete the gauntlet and land via v-merge-back.sh)\n' "$br" "$n" "$HOME/.claude" "$REPO" ;;
+        (held)
+          printf '    ⏸ %s — %s commit(s) NOT on main — HELD by the drain THIS pass (see its ⏸ HOLD line above: QA-fail / hold-marker / incomplete gauntlet). Re-running will NOT land it — clear the blocker (e.g. re-run v-qa-reviewer if the verdict is stale), then re-drain.\n' "$br" "$n" ;;
+        (live)
+          printf '    ⏳ %s — %s commit(s) NOT on main — owning session is LIVE (drain correctly skipped it; it lands via its own merge-back or a later drain once it ends)\n' "$br" "$n" ;;
+        (deferred)
+          printf '    ⏸ %s — %s commit(s) NOT on main — deferred (main still carries uncommitted WIP from a live sibling; lands automatically once that clears)\n' "$br" "$n" ;;
+        (*)
+          printf '    ⚠ %s — %s commit(s) NOT on main (not yet drained this pass — re-run to retry)\n' "$br" "$n" ;;
+      esac
+    done)"
+  local _needs_manual; _needs_manual="$(printf '%s\n' "$_stranded" | grep -c 'NEEDS MANUAL' || true)"
+  [ -z "$_stranded" ] || { echo "  ── still-unmerged worktree branches: ──"; printf '%s\n' "$_stranded"; }
+  if [ "$left" -eq 0 ] && [ -z "$_stranded" ]; then
+    # T4-F4 (2026-07-02 wave-4 forensic): "nothing left to do" was printed 5 lines after the runner itself
+    # parked an UNFINISHED pack — false comfort at the exact moment the operator decides to walk away.
+    # Queue-empty means nothing left to RUN; parked packs are still open work items.
+    if [ "${needs:-0}" -gt 0 ] 2>/dev/null; then
+      echo "✓ nothing left to RUN — but ${needs} parked pack(s) in .needs-review/ await your review (see the ⏭ lines above); the queue is NOT finished until they are verified or re-run"
+    elif [ "${needs_ack:-0}" -gt 0 ] 2>/dev/null; then
+      echo "✓ queue clear — nothing left to RUN (${needs_ack} pack(s) quarantined/acknowledged, held for interactive completion; see .needs-review/.acknowledged)"
+    else
+      echo "✓ queue empty — nothing left to do"
+    fi
+  else
+    [ "$left" -gt 0 ] && { echo "remaining (re-run the same command to resume):"; list_all_packs | sed "s@^$PACK_ABS/@  @"; }
+    if [ -n "$_stranded" ]; then
+      if [ "${_needs_manual:-0}" -gt 0 ] 2>/dev/null; then
+        echo "  (pack-file queue is empty, but ${_needs_manual} branch(es) above are NEEDS-MANUAL — they will NOT land on their own; a later run-v-packs pass will keep reporting them until fixed)"
+      else
+        echo "  (pack-file queue is empty, but branches above are not yet on main — see verdicts; deferred/live ones land automatically, NEEDS-MANUAL ones will not)"
+      fi
+    fi
+  fi
+  # P2 (2026-07-02) + NO-HUMAN (2026-07-04): exit code reflects whether the run is TRULY CLEAR. 0 = every pack
+  # is done AND its work is on main AND the VERIFY gate passed; 2 = ran fine but SOMETHING is still outstanding.
+  # die() still uses 1 for hard errors; 2 is the distinct "incomplete, not errored" signal a cron/CI wrapper
+  # gates on. THE AUTONOMY INVARIANT (what "no human in the middle" rests on): the runner MUST NEVER exit 0 while
+  # any work is queued, kept-broken, failed verification, or off main — otherwise a wrapper reads success and
+  # walks away from real outstanding work. Each term below closes a silent-success hole the 2026-07-04 autonomy
+  # audit found (all three reviewers independently converged on this exit-code gap as the #1 blocker):
+  local _rc=0
+  [ "${needs:-0}" -gt 0 ] 2>/dev/null && _rc=2               # parked packs (0-turn/timeout, no terminal token)
+  [ "${WAVE_BLOCKED:-0}" = 1 ] && _rc=2                      # W-LAND: a stopped wave barrier is open work
+  # NO-HUMAN-1: packs still QUEUED/kept-broken after the run. A stalled wave (partial/error/incomplete/no-task
+  # after retries) `break`s the wave loop leaving packs in place — previously invisible to _rc (it never read
+  # `left`). --once deliberately stops after one wave, so later-wave packs there are BY DESIGN, not a failure.
+  [ "$ONCE" != 1 ] && [ "${left:-0}" -gt 0 ] && _rc=2
+  # NO-HUMAN-2: the VERIFY (99-*) GO/NO-GO pack did not pass (set in _run_verify_pack; count_left can't see it).
+  [ "${VERIFY_FAILED:-0}" = 1 ] && _rc=2
+  # NO-HUMAN-3: ANY branch still off main at exit is outstanding — INCLUDING deferred/live. The old code let
+  # deferred/live read as exit-0 "self-resolves automatically", but that self-heal REQUIRES a subsequent run to
+  # re-drive the merge; with nothing re-running it, the attested commit STRANDS off main (the documented merge-
+  # STRAND class — a P1 fix once left live off main). For autonomous use, not-on-main = not-done → exit 2 so the
+  # wrapper re-runs (which lands a deferred branch) instead of walking away on a false success. The report lines
+  # above still distinguish deferred/live (re-run lands it) from NEEDS-MANUAL (a human must fix it).
+  [ -n "$_stranded" ] && _rc=2
+
+  # ── SELF-AUDIT SUMMARY (2026-07-04): one consolidated, actionable block instead of scattered lines the
+  # operator has to reconstruct by scrolling. Presentation over data already computed above — it decides nothing
+  # new and never changes _rc; it exists so "does this run need me?" has ONE answer. INVARIANT: it must never
+  # print "NONE" while _rc≠0 (the old summary said NONE whenever _rc's gaps above fired — a lie at the worst moment).
+  local _stranded_selfheal=""; [ -n "$_stranded" ] && [ "${_needs_manual:-0}" -eq 0 ] 2>/dev/null && _stranded_selfheal=1
+  echo "═══ SELF-AUDIT SUMMARY ═══"
+  echo "  packs: $(count_done) done · ${needs:-0} parked (.needs-review/) · ${needs_ack:-0} quarantined(ack) · ${left:-0} queued"
+  if [ "${_rc}" = 0 ]; then
+    echo "  human attention needed: NONE — exit 0, every pack is done and on main, nothing queued."
+  else
+    echo "  human attention needed: YES — exit ${_rc} (see the lines above for specifics):"
+    [ "${needs:-0}" -gt 0 ] 2>/dev/null && echo "    • ${needs} pack(s) parked in .needs-review/ — verify each (already on main → .done/; unfinished → run interactively)"
+    [ "$ONCE" != 1 ] && [ "${left:-0}" -gt 0 ] && echo "    • ${left} pack(s) still queued / not completed — re-run the same command to continue (a stalled wave stops before dependent waves)"
+    [ "${VERIFY_FAILED:-0}" = 1 ] && echo "    • the VERIFY (99-*) pack did NOT pass — the run's GO/NO-GO gate failed; inspect its log before trusting this batch"
+    [ "${WAVE_BLOCKED:-0}" = 1 ] && echo "    • a wave-landing barrier stopped this run before later waves — clear the blocker, then re-run to resume"
+    [ "${_needs_manual:-0}" -gt 0 ] 2>/dev/null && echo "    • ${_needs_manual} worktree branch(es) are NEEDS-MANUAL — they will NOT land on their own (see the ✗ lines above)"
+    [ -n "$_stranded_selfheal" ] && echo "    • attested work is not yet on main (see the per-branch verdicts above) — re-run the same command to re-drive landing; a deferred/live branch lands on the next run, while one that keeps failing will escalate to NEEDS-MANUAL (a sibling /v session or uncommitted WIP on main can hold a merge)"
+  fi
+  echo "  re-run the same command any time to resume — finished packs stay archived, nothing is repeated needlessly."
+  # RUN-SUMMARY (2026-07-06 forensics, F-6): persist the final accounting + exit code DURABLY.
+  # The runner's stdout is interactive-only — a post-mortem of a finished batch previously could not verify
+  # the runner's most load-bearing claim (its exit code) or its self-audit counters. One small file per run,
+  # newest wins on filename timestamp; best-effort (never affects the run's fate or exit code).
+  {
+    printf 'run_finished_at: %s\nexit_code: %s\npacks_done: %s\npacks_parked: %s\npacks_queued: %s\nverify_failed: %s\nwave_blocked: %s\nbranches_needs_manual: %s\nbranches_off_main: %s\n' \
+      "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)" "$_rc" "$(count_done)" "${needs:-0}" "${left:-0}" \
+      "${VERIFY_FAILED:-0}" "${WAVE_BLOCKED:-0}" "${_needs_manual:-0}" "$(printf '%s\n' "${_stranded:-}" | grep -c . 2>/dev/null || echo 0)"
+    [ -n "${_stranded:-}" ] && printf 'stranded_branches: |\n%s\n' "$(printf '%s\n' "$_stranded" | sed 's/^/  /')"
+  } > "$LOG_DIR/RUN_SUMMARY_$(date +%s 2>/dev/null || echo 0).txt" 2>/dev/null || true
+  # DONE- rename: only on a truly-clean finish, AFTER the durable RUN_SUMMARY is written (so it moves with the
+  # dir). Never on _rc≠0 — a renamed-but-incomplete dir would hide outstanding work from a resume run.
+  # (_maybe_rename_done also self-skips while acknowledged-quarantine packs are still parked — see its guards.)
+  [ "$_rc" = 0 ] && _maybe_rename_done
+  exit "$_rc"
+}
+
+# ── main ──────────────────────────────────────────────────────────────────────
+main(){
+  # QA-001 (2026-07-04): fail LOUDLY, first thing, if the lib seam didn't actually deliver its API —
+  # a missing/renamed/broken run-v-packs-lib/*.sh must never let main() silently run with undefined
+  # extracted functions (bash would print "command not found" per call-site and downstream callers
+  # reading those via `[ -z "$(...)" ]`/count/`if fn; then` contexts would misreport — e.g. an empty-read
+  # pack dir, or has_pending_landing "false" masking real unlanded work). This list MUST grow with every
+  # extraction phase: one entry per lib group, covering that group's functions main()'s paths reach.
+  # Deliberately NOT checked at source time (see the seam comment above) so `source run-v-packs` in the
+  # test harnesses still defines the full inline API even with the lib dir absent/renamed.
+  _RVP_REQUIRED_LIB_FNS="is_pack wave_of list_all_packs list_packs_in_wave waves_present list_verify_packs verify_pack explain_rejected_candidates oversized_packs pack_name count_done count_needs count_needs_ack _list_needs _is_ack_quarantined _ack_names _ack_ledger count_left human_time _main_branch has_pending_landing _timeout_kind _result_out_tokens _fork_turns _inconclusive_kind _gauntlet_artifacts_verified _gauntlet_verdicts_not_failed verdict sid_of capture_telemetry _archive_finished_pack reset_epoch reconcile_parked_by_sid reconcile_parked_by_proof reconcile_parked_readonly gc_merged_branches _drain_verdict_for _land_and_reconcile _unlanded_branches _rotate_pack_log _watchdog _pack_is_readonly _pack_prompt run_pack _adopt_orphans _hb run_pass_wave drain_wave land_wave warn_skipped_lower_waves"
+  _rvp_missing_fns=""
+  for _rvp_fn in $_RVP_REQUIRED_LIB_FNS; do
+    declare -F "$_rvp_fn" >/dev/null 2>&1 || _rvp_missing_fns="$_rvp_missing_fns $_rvp_fn"
+  done
+  if [ -n "$_rvp_missing_fns" ]; then
+    die "required lib function(s) not defined — missing or broken *.sh under ${_RVP_LIB_DIR:-run-v-packs-lib}/? undefined:$_rvp_missing_fns"
+  fi
+  unset _rvp_missing_fns _rvp_fn _RVP_REQUIRED_LIB_FNS
+
+  _parse_args "$@"
+  _preflight_and_dirs
+  _acquire_lock
+  _arm_dispatch
+  _clamp_concurrency
+  _emit_run_banner
+  _conflict_gate
+  if [ "$DRY" = 1 ]; then _dry_run_report; fi
+
+  # nothing to do? say so plainly (don't masquerade an empty/wrong dir as "queue empty") — BUT only take this
+  # shortcut when there is ALSO no deferred-landing work. An empty pack queue does NOT mean everything landed on
+  # main; if a parked pack or an unmerged worktree branch exists, fall THROUGH (the wave loop is a no-op with 0
+  # packs) so the end-of-run drain/reconcile/stranded-report below still runs. (P1, 2026-07-02 — see the merge-
+  # STRAND class: gated work left off main with nothing re-driving the merge.)
+  if [ "$(count_left)" -eq 0 ] && [ -z "$(verify_pack)" ]; then
+    if has_pending_landing; then
+      # R2: say WHY we proceed with zero packs — silence here read as "runner is confused about an empty dir".
+      echo "no runnable packs in $PACK_DIR — but pending LANDING work exists (parked pack in .needs-review/, or a worktree branch with commits not yet on $(_main_branch "$REPO")) — running the end-of-run drain/reconcile before exiting."
+    else
+      # NO-HUMAN-5 (2026-07-04 autonomy audit, surfacing Finding 3): an all-oversized pack dir must NOT read as
+      # clean success. oversized_packs lists files that ARE /v packs (correct first line) but exceed
+      # PACK_MAX_BYTES, so they were skipped — unambiguously INTENDED work the runner did not run. Exiting 0
+      # here lets a wrapper read "done" while real packs sit un-run. Exit 2 (attention needed). (A dir of
+      # genuinely-non-pack files — READMEs/plans with no /v first line — is indistinguishable from a mis-typed
+      # pack and stays exit 0, to avoid false-alarming on intentionally-skipped files.)
+      local _big0; _big0="$(oversized_packs)"
+      if [ -n "$_big0" ]; then
+        echo "⚠ no RUNNABLE packs in $PACK_DIR, but $(printf '%s\n' "$_big0" | grep -c .) /v file(s) were SKIPPED as oversized (> $((PACK_MAX_BYTES/1000))KB — a concatenated bundle, not one pack). Split them into per-pack files, then re-run. NOT exiting clean — real work was skipped:"
+        printf '%s\n' "$_big0" | awk -F'\t' '{printf "    %dKB  %s\n",$1/1000,$2}'
+        exit 2
+      fi
+      # A dir whose packs are ALL already archived (count_done>0) with nothing queued and nothing pending is a
+      # COMPLETED batch being re-run — mark it DONE- (retroactively, so a finished batch gets the prefix even if
+      # it completed on a PRIOR run before reaching _finish_report). _maybe_rename_done self-guards (count_done>0,
+      # not a repo/home root, skips an already-DONE- dir), so a genuinely-empty/non-pack dir still just reports.
+      if [ "$(count_done)" -gt 0 ]; then
+        # Already-complete re-run: show the prominent banner either way — rename it now if not yet DONE-,
+        # or (if it's already DONE-prefixed from a prior finish) just re-affirm completion with the banner.
+        # EXCEPT while acknowledged-quarantine packs are still parked: they're not actionable (exit 0, no
+        # nag) but a DONE- rename claims "fully complete; nothing left to run" and would BURY work the
+        # operator explicitly HELD for interactive completion — keep the dir visible so they can finish it.
+        local _ackn0; _ackn0="$(count_needs_ack)"
+        if [ "${_ackn0:-0}" -gt 0 ] 2>/dev/null; then
+          echo "all runnable packs complete in $PACK_DIR — ${_ackn0} pack(s) held in acknowledged quarantine (.needs-review/.acknowledged); not blocking, dir kept as-is so the held work stays visible."
+        else
+          case "$(basename "$PACK_ABS")" in
+            DONE-*) _done_banner "✓ ALREADY COMPLETE — $(basename "$PACK_ABS")/" "all packs finished; nothing to run" ;;
+            *)      echo "all packs already complete in $PACK_DIR — nothing to run."; _maybe_rename_done ;;
+          esac
+        fi
+        exit 0
+      fi
+      echo "no packs found in $PACK_DIR — a pack is a .txt/.md whose first line is /v (READMEs, plans, validators are skipped)."; explain_rejected_candidates; exit 0
+    fi
+  fi
+
+  local w WAVE_BLOCKED=0 _drain_out="" _drain_last=""   # drain outputs are set by _land_and_reconcile (barrier + end-of-run)
+
+  # W-LAND PRE-RUN BARRIER: gate the FIRST wave of THIS run exactly like every later wave. A resumed run
+  # must not launch its earliest queued wave on top of work a PREVIOUS run left stranded or parked —
+  # live-fired during development: run 1 correctly blocked on wave-1's ungated strand; on re-run, wave-1's
+  # pack was already archived, so wave-2 was the earliest wave present and ran against a main still
+  # missing wave-1's held work (the same broken dependency, smuggled back in via resume). Costs nothing
+  # when clean: it fires only when has_pending_landing() already says something is unlanded or parked.
+  if { [ "$(count_left)" -gt 0 ] || [ -n "$(verify_pack)" ]; } && has_pending_landing; then
+    if ! land_wave pre-run; then
+      WAVE_BLOCKED=1
+      echo "⏹ not launching any wave — work left by a PREVIOUS run is not yet on main (see above); this run's waves would build on that same broken dependency. Clear the blockers, then re-run the same command."
+    fi
+  fi
+
+  # drain each wave in order, then LAND it on main (wave barrier); stop before dependent waves if either fails
+  if [ "$WAVE_BLOCKED" != 1 ]; then
+  for w in $(waves_present); do
+    [ "$(list_packs_in_wave "$w" | grep -c .)" -gt 0 ] || continue
+    echo "═══ WAVE $w — $(list_packs_in_wave "$w" | grep -c .) pack(s) ═══"
+    if ! drain_wave "$w"; then echo "⏹ stopping before later waves — wave $w did not fully complete (dependent waves would run on a broken dependency)."; break; fi
+    # W-LAND: --once still LANDS the wave it ran before exiting — a "one wave" run must not strand that
+    # wave's work off main any more than a full run would.
+    if ! land_wave "$w"; then
+      WAVE_BLOCKED=1
+      echo "⏹ stopping before later waves — wave $w finished but its work is NOT all on main (dependent waves would build on a main missing their dependency). Clear the blockers above, then re-run the same command to resume."
+      break
+    fi
+    [ "$ONCE" = 1 ] && break
+  done
+  fi
+
+  _run_verify_pack
+  _final_sweep
+  _finish_report
+}
+
+# Sourced for testing → expose functions without running main. Executed directly → run.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then main "$@"; fi

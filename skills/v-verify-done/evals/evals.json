@@ -1,0 +1,29 @@
+{
+  "skill_name": "v-verify-done",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Verify implementation for a Laravel 13 + Inertia.js + React feature that added 4 new files: app/Services/NotificationService.php, app/Http/Controllers/NotificationController.php, resources/js/Components/NotificationBell.tsx, tests/Feature/NotificationServiceTest.php. The project has codex-adversarial-reviewer.md in .claude/agents/.",
+      "expected_output": "Should: detect changed files via git (worktree-aware), categorize by type (PHP services, controllers; React components; test files), run convention checks for each type (naming, imports, FormRequest usage for controllers, design token compliance for React), dispatch codex-adversarial-reviewer via Agent tool since agent file exists in .claude/agents/, check for TODO markers and debug statements, verify test file covers the service, write VERIFY_DONE_REPORT_${CLAUDE_SESSION_ID}.md with findings and agent_review_status: dispatched.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Verify implementation for a project where .claude/agents/codex-adversarial-reviewer.md does NOT exist in either project or global (~/.claude/agents/) locations. Changed files: 2 Python files and 1 test file.",
+      "expected_output": "Should: detect codex-adversarial-reviewer.md is missing from both locations, fall back to invoking superpowers:requesting-code-review via Skill tool as mandatory fallback per _v-review.md, NOT produce a degraded self-review as substitute, write VERIFY_DONE_REPORT with agent_review_status: dispatched-via-fallback.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Verify implementation where changed files touch auth middleware (app/Http/Middleware/Authenticate.php) and payment processing (app/Services/BillingService.php). codex-adversarial-reviewer.md exists in .claude/agents/.",
+      "expected_output": "Should: detect that changed files touch auth and payments (security-sensitive areas per contract), elevate agent review to hostile adversarial focus, dispatch codex-adversarial-reviewer with elevated security focus, check for SQL injection patterns in billing code, verify CSRF protection on auth routes, check for unhandled exceptions in payment flows, write VERIFY_DONE_REPORT with elevated_review: true and security-focused findings.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Verify implementation in maintenance mode. Changed files are in ~/.claude/hooks/ and the global skills directory ~/.agents/skills/. The session is explicitly scoped to user-owned maintenance per references/v-core-maintenance.md.",
+      "expected_output": "Should: detect maintenance mode from the file paths (user-owned roots), scope verification to allowed maintenance paths only, verify canonical-first mirror handling (canonical edits in ~/.agents/skills/ before mirrors), check that targeted tests were run for changed skills, dispatch agent review with maintenance-specific hostile focus, write VERIFY_DONE_REPORT scoped to maintenance verification. Must NOT wander into product-code audits.",
+      "files": []
+    }
+  ]
+}

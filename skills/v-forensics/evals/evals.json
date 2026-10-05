@@ -1,0 +1,29 @@
+{
+  "skill_name": "v-forensics",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-forensics — three /v sessions ran concurrently on this repo this afternoon. One claims it merged to main, one wrote a HANDOFF, one I never heard back from. What really happened?",
+      "expected_output": "Discovers all three SIDs via durable per-SID artifacts (transcript slugs, .v/artifacts, commit-witnesses, session locks) rather than trusting session self-narration. For the 'merged' claim: verifies with git ground truth (merge-base --is-ancestor / rev-list main..branch), reporting a contradiction loudly if commits are NOT on main. For the HANDOFF session: reports its merge-deferral state and whether the drain can land it. For the silent one: reconstructs its end state from num_turns/result event/artifacts (stalled, parked, or killed). Zero source edits, zero drains/GC — analysis-only report with per-claim evidence citations.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-forensics 0a0a0a0a-1111-4111-8111-00000000c003 — audit just this session; its pack was archived as done but I can't find its changes on main.",
+      "expected_output": "Focuses on the named SID but still runs session discovery to catch sibling leakage. Pulls the pack's runlog result event (num_turns, result text), the session's commit-witness, and git ancestry for its branch. Identifies the archive-despite-unmerged contradiction as a landing-layer symptom and explicitly escalates the runner/drain half to /v-forensics-pack-runner per the sibling-skill boundary, while owning the per-session half (did the gauntlet actually run, was the attestation genuine or echoed text).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-forensics — the fleet ran 8 packs but there are zero SESSION_LOG yaml files. Fix the telemetry.",
+      "expected_output": "Does NOT fix anything — READ-ONLY is a hard constraint and the skill never ends by offering to fix. It diagnoses the blackout: whether the runner dispatched the session-log writer at all (the shared seam it hands to /v-forensics-pack-runner) vs the writer bailing per-session (its own lane: resolver exit codes, RESOLVER_BLOCKED markers, FORCE_CATCHUP path). Reports which half of the seam is implicated with artifact evidence and names the exact follow-up command/skill for remediation.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "/v-forensics — two parallel /v sessions ran in worktrees this morning; both worktrees still exist under .worktrees/. I see no transcripts for either and one has changes staged but not committed.",
+      "expected_output": "Computes a transcript slug PER worktree absolute path (non-alphanumeric → '-'), not just the main repo root's slug, and finds both sessions' .jsonl transcripts under their own ~/.claude/projects/<worktree-slug>/ dirs instead of falsely reporting a telemetry/transcript gap. Reads the shared writes logs from $(git rev-parse --git-common-dir), not <worktree>/.git/. Flags the staged-but-uncommitted worktree as a STAGED-ONLY strand (invisible to is-ancestor/ahead-count; destroyed by prune) and warns against cleanup before checkpoint, without performing any commit/cleanup itself (READ-ONLY).",
+      "files": []
+    }
+  ]
+}

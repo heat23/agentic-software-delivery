@@ -1,0 +1,29 @@
+{
+  "skill_name": "v-pre-flight",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run pre-flight checks on a Laravel 13 + React + Inertia.js project. The project has Pest for PHP tests, Vitest for JS tests, PHPStan for static analysis, Laravel Pint for code style, TypeScript for type checking, and Vite for bundling. All tools are installed and configured.",
+      "expected_output": "Should: resolve PROJECT_ROOT via git rev-parse --show-toplevel, detect all 6 tools (pest, vitest, phpstan, pint, tsc, vite), run each gate sequentially, classify each as pass/fail/skipped/not_evaluated, detect any pre-existing failures and baseline them per references/v-core-pre-existing.md, write PRE_FLIGHT_REPORT_${CLAUDE_SESSION_ID}.md with gate-by-gate results and overall PASS/FAIL verdict. Must NOT auto-fix any failures — report only.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Run pre-flight checks inside a worktree at /tmp/worktree-feature-billing. WORKTREE_PATH=/tmp/worktree-feature-billing. The worktree has 3 failing Pest tests and 2 TypeScript errors introduced by the current feature branch.",
+      "expected_output": "Should: cd to WORKTREE_PATH before any gate, verify pwd matches WORKTREE_PATH (abort if mismatch), run all gates from worktree directory (not main repo), report the 3 Pest failures and 2 TS errors as blocking, check for pre-existing failures against base branch, classify new vs pre-existing, write PRE_FLIGHT_REPORT with overall FAIL and specific failure details including file paths relative to worktree.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Run pre-flight on a minimal Python project with only pytest and ruff available. No TypeScript, no bundler, no PHP tools.",
+      "expected_output": "Should: detect only pytest and ruff as available tools, skip PHP/TS/JS gates with status skipped (not pass and not fail), run pytest and ruff, report results accurately, note skipped gates in the report without treating missing tools as failures. Must NOT fabricate results for tools that aren't installed.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Run pre-flight in incremental mode after a previous pre-flight already passed all gates. Only 2 files changed since the last run: app/Services/NotificationService.php and tests/Feature/NotificationServiceTest.php.",
+      "expected_output": "Should: detect incremental mode is applicable, identify the 2 changed files, run only the gates relevant to the changed files (PHP tests, PHPStan on the changed files), skip gates that cannot have been affected (JS build, CSS lint), write PRE_FLIGHT_REPORT noting incremental mode and which gates were re-run vs skipped-unchanged.",
+      "files": []
+    }
+  ]
+}

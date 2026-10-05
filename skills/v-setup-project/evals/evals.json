@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-setup-project",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-setup-project in a fresh Laravel 13 + Inertia + React + TypeScript + Tailwind v4 repo that has no .claude/ directory yet.",
+      "expected_output": "Resolves PROJECT_ROOT via git (never pwd); detects LARAVEL/INERTIA/REACT/TYPESCRIPT/TAILWIND and available tools; creates only stack-relevant hooks in .claude/hooks/ (copies the canonical detect-secrets-in-write.sh verbatim, chmod +x all scripts), stack-relevant reviewer agents in .claude/agents/ from references/agent-templates.md, and .claude/settings.json registering ONLY hooks that were actually created; appends ## Stack Conventions and ## Coupling Invariants to CLAUDE.md only if those headings are absent; scaffolds tests/e2e/ + a build-then-serve playwright.config.ts with the Laravel webServer command and baseURL; reports what was created and recommends the stage-appropriate first audit; honors the standalone Completion Contract (TRIVIAL_PASS or the full gauntlet) since it wrote .sh/.json/.ts files.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-setup-project in an existing project that already has a .claude/ directory with a settings.json, one hook, a custom CLAUDE.md, and a playwright.config.ts.",
+      "expected_output": "Defaults to 'Update existing'; merges only missing hooks/agents and merges new hook registrations into settings.json without overwriting existing entries; never replaces the custom CLAUDE.md (appends missing ## Stack Conventions / ## Coupling Invariants sections only if their headings are absent); does NOT overwrite the existing playwright.config.ts (notes it in the report); reports what was preserved vs added. Idempotent — re-running is mostly no-op.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-setup-project in a Next.js repo where jq is not installed and there is no git repository.",
+      "expected_output": "Detects NEXT=true + BUILD_SCRIPT=true and selects the Next.js webServer command (npm run build && npm run start, baseURL http://localhost:3000) rather than the Laravel default; because git is absent it STOPS and asks for PROJECT_ROOT explicitly (never runs git init, never falls back to pwd/home); because jq is missing it skips jq-dependent hooks, generates them with a '# REQUIRES: jq' comment, and does NOT register a hook path that was not created; flags missing mutation-testing tooling and missing @playwright/test as report notes without auto-installing.",
+      "files": []
+    }
+  ]
+}

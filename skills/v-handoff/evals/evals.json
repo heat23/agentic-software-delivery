@@ -1,0 +1,17 @@
+{
+  "skill_name": "v-handoff",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-handoff (mid-size feature session: a PLAN_ and an IMPLEMENTATION_REPORT_ artifact already exist at PROJECT_ROOT, 12 files changed, one failing test, an active feature branch with uncommitted changes)",
+      "expected_output": "Resolves PROJECT_ROOT via `git rev-parse --show-toplevel` (never pwd) per `_v-core.md` § Project Root Detection. Gathers git state and test state via the parallel bash commands in `references/data-collection.md` (branch, git status, diff stat, last 10 commits, worktree list, quick test check). Because there are meaningful blockers (a failing test) and 12 changed files, does NOT select Summary-Only Mode — writes the full handoff. Synthesizes Current Mental Model, Blockers, and Open Decisions FIRST from observable evidence (recent artifacts, commit log, diff markers), then presents the draft in ONE AskUserQuestion call (not a sequence of open-ended questions) for the operator to confirm or correct. Attaches the newest session artifacts via the glob `${PROJECT_ROOT}/*_${CLAUDE_SESSION_ID}.md` (the HANDOFF file itself is excluded because it is written after the glob runs) plus any unstamped `CONTENT_PIPELINE_STATUS.md`/`WORKTREE_HANDOFF.md` bridge files present. Populates the template from `references/handoff-template.md`, strips every `<!-- AUTHORING NOTE -->` block and verifies zero remain via the grep check, then writes `{repo_path}/.v/artifacts/HANDOFF_${CLAUDE_SESSION_ID}.md`. Ends with the HANDOFF COMPLETE banner naming the absolute file path and the next-session instruction.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-handoff (trivial session: no prior session artifacts exist, a one-line config fix is the only uncommitted change, tests pass, no worktree in play)",
+      "expected_output": "Selects Summary-Only Mode per the documented criteria: changed files are limited and easy to infer from `git status`, no failing tests or broken builds to explain, no open branch/worktree coordination risk, and the next session mostly needs 'where I left off.' Keeps the handoff concise — branch, uncommitted changes, latest artifact (or explicitly 'none' since none exist), and the next 1-3 concrete steps — and does NOT force the full artifact-inventory narrative. Still includes the mandatory Blockers and Open Decisions sections per Gotcha 5 ('never omit them'), populated as 'none detected' rather than dropped. Synthesizes the draft from git status/log alone (no artifacts to read), presents it in one AskUserQuestion call for confirm/correct, then writes the lighter `HANDOFF_${CLAUDE_SESSION_ID}.md` to `.v/artifacts/` with all `<!-- AUTHORING NOTE -->` blocks stripped and verified absent.",
+      "files": []
+    }
+  ]
+}

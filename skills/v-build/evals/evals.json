@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-build",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Execute this plan: Add a Stripe subscription billing system to our Laravel 13 SaaS. The plan has 6 items: (1) Install Laravel Cashier, (2) Create subscription plans migration, (3) Build pricing page React component via Inertia, (4) Implement checkout flow with Stripe Elements, (5) Add webhook handler for subscription events, (6) Create billing portal redirect. Tech stack: Laravel 13, Inertia.js, React, PostgreSQL.",
+      "expected_output": "Implementation following TDD discipline with red-green-refactor for backend logic. Should: resolve PROJECT_ROOT first, validate plan against PLAN_SCHEMA, run pre-flight checks via v-pre-flight, implement items in dependency order (migration before checkout flow), write Pest tests for webhook handler and subscription logic, run quality gates (phpstan, pint, pest, tsc, vite build) after each major item, invoke v-polish for the React pricing page component, run v-verify-done at completion. Produces IMPLEMENTATION_REPORT with files changed, tests added, and verification results.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Implement the fixes from this audit report: AUDIT_REPORT lists 3 CRITICAL findings (SQL injection in raw query on search endpoint, missing rate limiting on auth routes, exposed API keys in Inertia shared data) and 5 HIGH findings (N+1 queries on dashboard Eloquent relationships, missing CSRF on 2 API routes, no validation on file upload FormRequest, outdated Composer packages with CVEs, missing React error boundaries in Inertia pages). Laravel 13 + React + Inertia.js app.",
+      "expected_output": "Implementation that prioritizes CRITICAL findings first, then HIGH. Should: validate audit report structure, fix SQL injection with parameterized Eloquent queries + Pest test, add throttle middleware to auth routes + test, move API keys out of HandleInertiaRequests shared data to server-side only + verify no client exposure, then address HIGH findings in impact order. Each fix gets its own Pest or Vitest test. Should NOT modify files outside the scope of the audit findings. Quality gates run after each fix group (phpstan, pint, pest, tsc). Produces IMPLEMENTATION_REPORT mapping each finding ID to disposition (fixed, deferred, not-applicable).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Build a real-time notification system from this plan. Items: (1) Set up Laravel broadcasting with Reverb, (2) Create notifications table migration and Notification model, (3) Build notification bell React component with unread count badge via Inertia, (4) Implement mark-as-read API endpoint, (5) Add browser push notification opt-in via service worker. The plan specifies worktree execution for parallel safety.",
+      "expected_output": "Implementation using worktree operations per v-exec-worktree.md. Should: create worktree branch, configure Reverb broadcasting in config/broadcasting.php, write migration and model with Pest tests, build React notification bell component as Inertia partial (triggers v-polish for UI), implement mark-as-read endpoint with FormRequest validation and Pest test, add push notification service worker. Tests cover: notification creation, mark-as-read state change, broadcasting event dispatch via Laravel Events, push subscription storage. Worktree merged back after all gates pass. Should detect the async broadcasting pattern and reference _v-jobs.md for queue worker setup.",
+      "files": []
+    }
+  ]
+}

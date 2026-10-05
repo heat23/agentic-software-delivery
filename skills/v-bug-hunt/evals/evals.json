@@ -1,0 +1,41 @@
+{
+  "skill_name": "v-bug-hunt",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-bug-hunt onboarding flow --standard",
+      "expected_output": "Runs a read-only adversarial review of the onboarding flow, asks no broad full-codebase question when the target is explicit, writes BUG_HUNT_REPORT_[timestamp]_${CLAUDE_SESSION_ID}.md, includes concrete path:line evidence and paste-runnable repro blocks, and emits a scoped prompt pack for /v-build rather than editing application files.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-bug-hunt checkout --thorough",
+      "expected_output": "Reviews checkout as one target subsystem, dispatches or simulates specialist defect dimensions, distinguishes behavioral defects from lint/style findings, tags unverified UI claims when browser evidence is unavailable, and refuses to auto-fix findings inside the skill.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-bug-hunt billing (with a PRE_FLIGHT_REPORT in the project root whose frontmatter says 'status: fail')",
+      "expected_output": "Detects the failing pre-flight during the compose-with-prior-audits step using the 'status: fail' / 'Overall Status: FAIL' grep, refuses to run the hunt, and tells the operator to fix pre-flight gates first instead of writing a BUG_HUNT_REPORT against a broken tree.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "/v-bug-hunt auth quick",
+      "expected_output": "Runs Quick depth but still includes Dimension 4 (Auth, Session & RBAC) because the target is auth-centric (target-aware override), and any UI-behavior claims made without Playwright browser evidence are tagged UNVERIFIED-UI and capped at P3 — never reported as P0/P1.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "/v-bug-hunt billing --lens=boundaries --thorough",
+      "expected_output": "Resolves LENS=boundaries from the explicit flag, loads the boundary-condition protocol from references/boundaries-lens.md instead of the default 8-dimension bugs table, runs all 9 EHUNT-* dimensions (empty/limit/time/money/unicode/quantity/state/concurrent/entitlement), writes findings into the SAME BUG_HUNT_REPORT_[timestamp]_${CLAUDE_SESSION_ID}.md (with lens: boundaries in the metadata header, not a separate EDGE_HUNT_REPORT file), composes with any recent bugs-lens BUG_HUNT_REPORT on the same target as baseline, and runs a critic-dispatch pass on the findings before generating the prompt pack.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "/v-bug-hunt onboarding — find the DST and leap-year edge cases in the signup date logic",
+      "expected_output": "Infers LENS=boundaries from the keyword match (DST, leap year) even though no --lens flag was passed, and does NOT run the default bugs-lens 8-dimension table for a request that is clearly asking for boundary-condition coverage.",
+      "files": []
+    }
+  ]
+}

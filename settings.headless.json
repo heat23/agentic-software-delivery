@@ -1,0 +1,178 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/session-context-loader.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/stop-drain-deferred-merges.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-pr-creation.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/enforce-pre-commit-gates.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/parallel-test-throttle.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-v-polling.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-cross-session-add.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/worktree-safety.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/track-session-writes.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/database-destruction-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/protect-main-branch.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/worktree-write-boundary.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/readonly-edit-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/track-session-writes.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/protect-agent-review.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-v-polling.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-fork-agent-dispatch.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/abandonment-telemetry.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check-review-artifact.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/uncommitted-changes-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/stop-drain-deferred-merges.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/restore-hook-permissions.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/record-agent-dispatch-provenance.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/durable-artifact-copy.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/fork-payload-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/commit-witness-recorder.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/record-codex-dispatch-provenance.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

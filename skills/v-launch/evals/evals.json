@@ -1,0 +1,20 @@
+{
+  "skill_name": "v-launch",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-launch — I think my Laravel SaaS is ready to launch. Walk me through it.",
+      "expected_output": "Step 0 orients (reads CLAUDE.md, detects no prior PRELAUNCH_READINESS_REPORT / legal docs / LAUNCH_PLAN). Step 1 runs /v-prelaunch-readiness (Path A Skill tool, or Path B v-dispatch-subagent.sh if blocked) → its MUST-FIX/SHOULD-FIX punch list; this is the go/no-go gate. Step 2 runs /v-legal-docs-generate for baseline privacy/terms/cookie (reports which were generated vs already present; an OUT_OF_SCOPE jurisdiction emission or a LEGAL RISK-tagged compliance-gap item routes into the Legal risk bucket — never SHOULD-FIX — and blocks GO unless explicitly overridden with `--override-legal-risk`). Step 3 runs /v-launch-channels for the owned/earned channel sequence (its assets pass through /v-anti-template-gauntlet before publish). Step 4 writes LAUNCH_PLAN_${CLAUDE_SESSION_ID}.md with `# LAUNCH_PLAN` H1 + session: line: `## Verdict` (GO / NO-GO — clear N MUST-FIX first / NO-GO — legal risk open / GO (gate overridden) / GO (legal risk overridden)), `## Blockers (MUST-FIX)` each with a `reply fix N` affordance, `## Legal risk (blocks GO unless explicitly overridden)` (or 'none open'), `## Before launch (SHOULD-FIX)`, `## Legal`, `## Launch day` channel sequence + follow-up cadence, and a `## snapshot` block. Every item passes the v-core-solo-motion zero-outreach gate (owned/earned channels only — no cold DMs, mass outreach, or paid placement). Does NOT git commit or post anything."
+    },
+    {
+      "id": 2,
+      "prompt": "/v-launch — check if I can launch (the readiness gate finds 2 MUST-FIX blockers).",
+      "expected_output": "Step 1's /v-prelaunch-readiness returns open MUST-FIX findings → the gate is NO-GO. The LAUNCH_PLAN's `## Verdict` reads `NO-GO — clear 2 MUST-FIX first`, the two blockers lead the board each with a `reply fix N` affordance, and the wizard does NOT present publish-ready launch assets while a MUST-FIX is open (it may still generate the channel plan but stamps it gated on clearing blockers). It does not fabricate a GO. Offers the --skip-gate override only with an explicit acknowledgement recorded in the plan."
+    },
+    {
+      "id": 3,
+      "prompt": "/v-launch fix 1,2 — clear the blockers from my current launch plan.",
+      "expected_output": "Step 5 one-tap execute against the current LAUNCH_PLAN's MUST-FIX list. Confirms scope (blockers 1 and 2 by title) in one line, then hands each to /v (`/v <blocker>`) — /v owns the TDD/build/gate loop and the Stop-hook artifact contract a launch session can't satisfy mid-flight, so the code write correctly flips CODE_CHANGED=1 into /v's own gauntlet (v-launch does not keep claiming md-only). Then re-runs Step 1's gate to confirm the blockers cleared and re-issues an updated verdict. Does not fix items the operator didn't pick. No git commit."
+    }
+  ]
+}

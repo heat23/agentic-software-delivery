@@ -1,0 +1,71 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Stock macOS: bash 3.2 and the BSD userland.
+          - name: macOS (bash 3.2, BSD tools)
+            os: macos-latest
+            path_prefix: /bin
+          # GNU coreutils, sed and grep.
+          - name: Ubuntu (GNU tools)
+            os: ubuntu-latest
+          # mawk 1.3.4-20200120 reads regex intervals such as {2,4} literally: the strictest awk
+          # these scripts are likely to meet.
+          - name: Debian 12 (mawk)
+            os: ubuntu-latest
+            container: debian:12
+
+    steps:
+      - name: Install dependencies (Debian container)
+        if: matrix.container
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git jq openssl perl procps python3 uuid-runtime
+
+      - uses: actions/checkout@v4
+
+      - name: Install uuidgen (Ubuntu)
+        if: ${{ runner.os == 'Linux' && !matrix.container }}
+        run: command -v uuidgen || { sudo apt-get update && sudo apt-get install -y uuid-runtime; }
+
+      - name: Tool versions
+        run: |
+          export PATH="${{ matrix.path_prefix || '' }}${{ matrix.path_prefix && ':' || '' }}$PATH"
+          bash --version | head -1
+          if [ -n "${{ matrix.path_prefix || '' }}" ]; then
+            # The macOS leg exists to run the suite under stock bash 3.2: fail if that is not what runs.
+            bash -c '[ "${BASH_VERSINFO[0]}" -eq 3 ]' || { echo "expected bash 3.2 first on PATH"; exit 1; }
+          fi
+          (awk -W version 2>/dev/null || awk --version 2>/dev/null || true) | head -1
+          jq --version
+          git --version
+
+      - name: Run the test suite
+        if: ${{ !matrix.container }}
+        run: |
+          export PATH="${{ matrix.path_prefix || '' }}${{ matrix.path_prefix && ':' || '' }}$PATH"
+          bash scripts/run-tests.sh
+
+      # Containers run as root, which bypasses file permissions; run as a normal user instead.
+      - name: Run the test suite (unprivileged user)
+        if: ${{ matrix.container }}
+        run: |
+          useradd -m tester
+          chown -R tester "$GITHUB_WORKSPACE"
+          su tester -c "cd '$GITHUB_WORKSPACE' && bash scripts/run-tests.sh"

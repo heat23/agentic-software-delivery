@@ -1,0 +1,35 @@
+{
+  "skill_name": "v-tdd",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-tdd \"users report 500 when canceling a subscription mid-cycle\"",
+      "expected_output": "Entry Point D (bug report). Resolves PROJECT_ROOT first, extracts symptom (500) + trigger (cancel mid-cycle) + entity (subscription), greps for the cancel handler (controller/job/service), and scaffolds a FEATURE test that REPRODUCES the bug (hits the real route → real DB, actingAs the affected user, asserts the current broken behavior). Engages the senior payments persona (Stripe/Subscription trigger) for the concurrency/idempotency lens. Runs the test wrapped in timeout/gtimeout, confirms RED via the fail-loud gate: exit code non-zero, a newly-added test named in the failure output, failure mode = missing-implementation/wrong-behavior (NOT a setup/parse/import error). Runs the Step 5.5 test-only-writes gate (no production-source paths written). Does NOT create or edit any production source (that is v-build's GREEN phase). Ends with the _v-core.md Standard Completion Message (Status: RED, test file path, next step: /v-build).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-tdd \"POST /api/accounts/{id}/subscribe\"",
+      "expected_output": "Entry Point C (route specification). Resolves the route to its controller method via route:list, then generates a FEATURE test against the endpoint (real route → real DB with $this->post(...) + actingAs), NOT a unit test that mocks the controller — the route is the contract, and a mock-only unit test is insufficient evidence per the workflow rule. Covers auth-required, authorization (wrong user → 403), validation errors, and the happy-path DB assertion. Confirms RED for missing-implementation reason and passes the test-only-writes gate.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-tdd (with ASYNC_LIFECYCLE_TRACE_<sid>.md present at PROJECT_ROOT listing 3 failure_modes_to_test entries: idempotency, retry, ordering — each with arrange/act/assert)",
+      "expected_output": "Workflow step 0.5 fires. Reads the trace, writes ONE RED-phase test per failure_modes_to_test entry (3 tests) using each entry's arrange/act/assert directly as the test-body skeleton, with per-test arrange inline (NOT in beforeEach, to avoid cross-contamination between failure-mode tests). Any integration_tests_needed / test_layer: integration modes are surfaced in the post-RED report but NOT scaffolded (they need a real broker+worker). Confirms RED, notes the fix at v-build must make ALL entries pass — not just the reported symptom.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "/v-tdd PaymentService (with an ASYNC_LIFECYCLE_TRACE providing 5 unit-layer modes, a PLAN with 2 test_first entries, and 3 personas engaging with 2 candidates each = 6 → 13 raw candidates)",
+      "expected_output": "Applies the test-budget cap (8 max) with the documented prioritization: take all 5 async-trace tests (priority 1), both PLAN test_first entries (priority 2, running total 7), then 1 payments-persona test (priority 3.1, running total 8), and DROPS the remaining 5 lower-priority persona candidates (the 2 async-persona candidates are redundant with the trace-derived tests so dropping them costs nothing). Documents the dropped tests in the post-RED report so the operator knows what was deferred. Never exceeds 8 RED-phase tests.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "/v-tdd DiscountCalculator (where the calculate() method is already fully implemented and correct)",
+      "expected_output": "Scaffolds the test, runs it, and the test PASSES on first run (exit 0). The fail-loud RED gate treats exit 0 as ABORT (TDD requires the test to fail before implementation exists) and re-tasks with the exact pass-on-first-run prompt. After at most 2 re-task attempts still passing/setup-erroring, STOPS and writes BUILD_BLOCKER_<timestamp>_<sid>.md (does NOT silently re-task a third time). Never infers pass/fail from textual output — the exit code is authoritative. Recommends the operator review whether the implementation is already complete and the test is redundant (test-after, not TDD).",
+      "files": []
+    }
+  ]
+}

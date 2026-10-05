@@ -1,0 +1,48 @@
+{
+  "skill_name": "v-audit-code",
+  "note": "First live-fire executed 2026-07-05 against a seeded fixture (headless `claude -p`, Quick depth) — all expectations below were observed passing on that run.",
+  "evals": [
+    {
+      "id": 1,
+      "slug": "seeded-flaw-quick-pass",
+      "prompt": "Run a Quick-depth /v-audit-code against a seeded-flaw fixture: git repo containing a ~30-line Node HTTP service seeded with: (1) hardcoded live-format API key in source, (2) SQL built by string-concatenating user input, (3) plaintext password logged on login, (4) hardcoded password literal in an equality check, (5) unbounded SELECT * export with no pagination, (6) config shipping debug:true + cors:'*' + placeholder secret, (7) zero tests and no test/lint tooling. Commit everything; note the HEAD sha. Invocation: claude -p \"/v-audit-code PROJECT_ROOT=<fixture> quick\" with file-write + git-only Bash permissions",
+      "expected_output": "Quick-depth audit of a small seeded-flaw repo detects every seeded flaw class, produces a correct report, and never touches source. exactly one AUDIT_CODE_REPORT_[YYYYMMDD-HHMMSS]_<sid>.md appears at the fixture root; no dashboard, no fix-pack dir (Quick tier). report header table includes: audited commit == fixture HEAD sha, dirty-file count, date, depth 'Quick', scope, and gates listed as skipped-with-reason (never an implied pass). verdict is NOT production-ready and explicitly floor-gated (not averaged). all 7 seeded flaw classes appear as findings with correct file:line anchors. no fabricated anchors: every cited file:line exists in the fixture at HEAD. git status of the fixture shows zero modified/deleted tracked source files (untracked report + hook-owned .v/ are the only additions).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "slug": "depth-keyword-parsing",
+      "prompt": "Invoke /v-audit-code with depth keywords in the prompt (quick / deep / comprehensive / contradictory quick+thorough / headless with no keyword) and verify depth parsing behavior without unnecessary questions.",
+      "expected_output": "Depth keywords parse without asking; contradictions resolve deepest-wins. prompt containing 'quick' → Quick, no AskUserQuestion. prompt containing 'deep' or 'comprehensive' → Thorough, no AskUserQuestion. prompt containing both 'quick' and 'thorough' → Thorough, interpretation recorded in report header. headless run with no depth keyword → Standard, recorded in report header as the documented no-operator default.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "slug": "project-root-refusals",
+      "prompt": "Invoke /v-audit-code with hostile PROJECT_ROOT values (PROJECT_ROOT=$HOME, PROJECT_ROOT=~/.claude, and no PROJECT_ROOT with pwd outside any git repo) and verify the guardrails hold.",
+      "expected_output": "PROJECT_ROOT guardrails hold under hostile paths. PROJECT_ROOT=$HOME → refused, asks instead. PROJECT_ROOT=~/.claude → refused (meta-directory), asks instead. no PROJECT_ROOT and pwd not a git repo → asks; never silently audits pwd.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "slug": "fix-pack-contract",
+      "prompt": "Run /v-audit-code at Standard or Thorough depth on a project with material findings and verify the emitted fix packs satisfy the runnable pack contract consumable by run-v-packs.",
+      "expected_output": "Standard/Thorough runs emit packs consumable by run-v-packs. pack dir is .v-prompt-packs/v-audit-code-<MM-DD>/ (dated, no SID suffix); a same-day prior dir is archived, not clobbered. 00-README.md is the ONLY .md file and its wave-map table matches the flat .txt packs present on disk both ways. every pack is a flat .txt file (wave 0 = no prefix, e.g. <finding-id>.txt; ordered waves w1-<finding-id>.txt etc. — NOT NN-<FINDING-ID>.md), line 1 starts with '/v ', >=50 lines, no unsubstituted [placeholders], no git commit/push instructions, and carries the mandatory body schema (## Goal / ## Context / ## Files / ## Changes / ## Acceptance criteria / ## Tests / ## Constraints / ## Dependencies) on every implementation pack. Any material findings trigger mandatory closing waves: a parallel read-only verification wave (pre-flight + review packs using ## Goal / ## Checks / ## Acceptance, omitting the 'leave staged' line) then a sequential hardening pack, then 99-verify.txt last. Structural validator (validate-audit-prompt-packs.sh / v-runnable-pack-convention.md self-validate) and content validator both print PASS.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "slug": "deep-ux-mode-loads",
+      "prompt": "Invoke /v-audit-code on a UI-bearing web app with a prompt framed as a UI/accessibility/design review (e.g. \"/v-audit-code PROJECT_ROOT=<app> accessibility and UI audit, WCAG\"). Verify the absorbed deep-UX mode loads and is stamped.",
+      "expected_output": "The deep-UX/accessibility absorbed mode (from the retired /v-ui-audit) loads on a UI/WCAG-framed request. The report header stamps 'modes_loaded: deep-ux' (or 'deep-ux,refactor' if a refactor focus was also present) — never 'none' for a UI-framed request. Findings apply the WCAG 2.2 AA compliance floor and the deep-ux-audit.md lenses (contrast, focus states, target size, forms, structural anti-AI-tells); references/deep-ux-audit.md is read exactly once. Compliance-floor a11y findings on public/EU-facing surfaces are NOT auto-demoted ([EC-1]). A generic production-readiness prompt with no UI framing does NOT load deep-ux (stamp reflects what actually ran).",
+      "files": []
+    },
+    {
+      "id": 6,
+      "slug": "refactor-mode-loads",
+      "prompt": "Invoke /v-audit-code with a refactor/modernization-framed prompt (e.g. \"/v-audit-code PROJECT_ROOT=<app> refactor and modernize this codebase\"). Verify the absorbed refactor mode loads and is stamped.",
+      "expected_output": "The refactor/modernization absorbed mode (from the retired /v-refactor) loads on a refactor/modernize-framed request. Report header stamps 'modes_loaded: refactor' (or 'deep-ux,refactor' if UI focus was also present). references/refactor-modernization.md is read once; the modernization lens judges the code as era-current without naming hardcoded framework versions; the optional DEBT_TREND register (if emitted) uses finding_counts with a critical/P0 bucket, not just high/medium/low. A generic production-readiness prompt with no refactor framing does NOT load refactor (stamp reflects what ran).",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-audit-orchestrator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Operator invokes /v-audit-orchestrator on a project with no recent audit reports and picks '[Bundle] Pre-launch readiness sweep' from the entry-point question.",
+      "expected_output": "Auto-detection runs first (project context, recent-audit count for the {N} interpolation, stage signals). The single multi-choice question renders with the Consolidate option's {N} reflecting 0 recent reports (so that Meta option is omitted per its own render rule). On selecting the pre-launch bundle, the orchestrator dispatches v-prelaunch-readiness then v-anti-template-gauntlet sequentially (Path A via Skill tool, each invocation passing [V_DEPTH=1] so the specialist skips its own entry-point question and defaults to Thorough), logs each dispatch via TaskUpdate, then auto-invokes v-audit-consolidate since 2 specialists ran. Final output is a unified Step 7 summary table (skill/verdict/findings/report path/prompt pack per specialist) plus the consolidation section and a recommended next step pointing at the consolidated prompt pack. No manual paste-plan is ever presented to the operator.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Operator invokes /v-audit-orchestrator --advise on a project where CLAUDE.md mentions MRR and a count of paying customers, GSC export data exists, and no v-audit-seo report exists in the last 30 days.",
+      "expected_output": "Signal-reading pass runs (HAS_REVENUE_MENTIONS, HAS_GSC_DATA, etc.). State classification takes the LAUNCHED state (revenue mentions present) even though the repo may also show pre-launch-shaped signals like placeholder pricing text elsewhere — LAUNCHED is evaluated before GREENFIELD/PRE-LAUNCH per the state-ordering rule. Specialist-recommendation logic then picks v-audit-seo (HAS_GSC_DATA=1 and no recent SEO report) as the recommended specialist, not the pre-launch bundle. Confidence is reported as High or Medium (single clear signal match) with the rationale citing the specific MRR/GSC signals. The orchestrator presents the recommendation and awaits operator confirmation before dispatching — it does not auto-execute.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Operator selects '[Bundle] Pre-launch full sweep' (5 specialists) but the runtime blocks the Skill-tool dispatch on the very first specialist (v-prelaunch-readiness) with a disable-model-invocation restriction.",
+      "expected_output": "Orchestrator detects the Path A failure on the first dispatch attempt and switches to Path B for ALL remaining specialists in the bundle — 'remaining' includes v-prelaunch-readiness itself (the one whose Path A attempt just failed): it is redispatched as the first Path B call, not skipped, since it has not produced a report yet. Then v-anti-template-gauntlet, v-audit-seo, v-audit-messaging, and v-check each dispatch as independent claude -p subprocesses via v-dispatch-subagent.sh with [V_DEPTH=1] in their prompt, --mode self-write, and an explicit expected artifact path; each dispatch's exit code is logged via TaskUpdate. A non-zero exit from any one specialist is recorded in the run summary and the bundle continues to the next specialist rather than stalling — it never falls back to handing the operator a manual paste-plan. After all 5 specialists complete, v-audit-consolidate is invoked via Path B the same way, and Step 7's summary calls out any specialist that failed to produce its artifact.",
+      "files": []
+    }
+  ]
+}

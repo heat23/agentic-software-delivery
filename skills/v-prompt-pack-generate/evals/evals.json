@@ -1,0 +1,23 @@
+{
+  "skill_name": "v-prompt-pack-generate",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-prompt-pack-generate — turn the plan I just wrote into prompt packs. The plan (PLAN_*.md from this session) adds a saved-filters feature to an existing app: a migration + ExampleFilter model, an ExampleFilterController with store/index/destroy, an Inertia React ExampleFilters page, a nav entry, and Pest feature tests. Laravel 13 + Inertia + React.",
+      "expected_output": "A .v-prompt-packs/<slug>-<MM-DD>/ dir in the canonical RUNNABLE form from v-runnable-pack-convention.md: FLAT wave-prefixed w<N>-*.txt packs (NOT wave subfolders — that shape is deprecated) plus a 00-README master map, with a 99-verify pack last. Step 1 grounding actually opens the files the plan references (migration dir, app/Models, app/Http/Controllers, resources/js/Pages, routes) before partitioning, and notes any drift or already-done items. Waves are sequenced by dependency: schema/model first, controller + routes next, React page after the controller exists, tests last; packs WITHIN a wave touch disjoint files so they are parallel-safe. Each pack is a self-contained /v prompt naming its exact file set and gate, ending 'leave staged; do not commit' — executable unattended via run-v-packs. No application code is written.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v-prompt-pack-generate on PLAN_tiny_fix.md — it's a one-line copy change in a single Blade view plus its test. Make prompt packs for it.",
+      "expected_output": "Recognizes the plan is below the parallelism threshold (~8h / 1-2 sessions, roughly <4 implementation tasks). Instead of emitting a full wave/pack tree, it emits a lightweight inline checklist, tells the operator the plan is too small to benefit from wave packs, and stops. Does not fabricate artificial waves for a trivial change.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-prompt-pack-generate — generate packs. (No PLAN_*.md exists in this session and none is supplied.)",
+      "expected_output": "Step 0 finds no usable plan: the $CLAUDE_SESSION_ID glob misses and no explicit arg was given. The skill does NOT invent a plan or start writing code. It reports that no plan was found and refers the operator to /v-plan to author one (or to pass an explicit plan path), then stops.",
+      "files": []
+    }
+  ]
+}

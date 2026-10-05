@@ -1,0 +1,29 @@
+{
+  "skill_name": "v-discover-features",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v-discover-features What should I build next for ExampleInvoicer, a $19/mo invoicing tool for freelancers? Stack is Laravel 13 + Inertia + React, Stripe billing. Goal is increasing revenue per user. Competitors are FreshBooks and Wave.",
+      "expected_output": "V_DEPTH=0 so it asks the Goal question (or honors the stated 'revenue per user' goal). Resolves competitors via the priority list (explicit override FreshBooks + Wave wins) and, at V_DEPTH 0, confirms the list. Step 0 reads CLAUDE.md, builds the current feature inventory from routes/pages, runs Ahrefs in the MAIN context if available (else marks data_source: estimated), and loads any /v-check or /v-audit-code tech-debt artifact. Launches 3-4 research dimensions (D1 Competitor Feature Mapping, D2 Market Demand, D3 User Behavior & Friction, +D4 Content if Ahrefs) as fork-safe `claude -p` subprocesses via v-dispatch-subagent.sh with `--model sonnet --mode capture --extra-tools \"WebSearch WebFetch\"` — NOT the Agent tool — each writing `.v/discover-features-<dim>-<sid>.json`. Step 2 applies the Revenue Impact rubric, scores with PRIORITY_SCORE (18-50), up-weights revenue_impact by 1.25 for the stated goal, and classifies by competitor_coverage (Table Stakes >=4, Differentiator 2-3, Novel Bet ==1 & score>=30, else Nice-to-Have). Writes FEATURE_ROADMAP_<ts>_<sid>.md (with an ## Decisions section) + .json, and a plan-derived `.v-prompt-packs/v-discover-features-<MM-DD>/` pack of `.txt` wave files (00-README.md map + one paste-ready `[feature-slug].txt`/`w<N>-[feature-slug].txt` per feature, each starting on line 1 with `/v `, plus closing `w<N>-pre-flight.txt`/`w<N>-review.txt`/`w<N+1>-hardening.txt`/`99-verify.txt` waves).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "[V_DEPTH=1, V_CHAIN=/v→/v-discover-features] Full competitive gap analysis for a project with no Ahrefs MCP configured.",
+      "expected_output": "Skips all questions (V_DEPTH>=1): uses the CLAUDE.md product context and auto-detected competitors without the confirm prompt. Detects Ahrefs is unavailable, so keyword metrics are marked data_source: estimated, Dimension 4 (Content-Driven) is NOT dispatched and its WebSearch-only subset folds into D2 — leaving 3 parallel research dimensions. Each dimension dispatch still passes `--extra-tools \"WebSearch WebFetch\"` (a no-agent --model dispatch otherwise defaults to read-only tools and does zero web research). If >=50% of launched dimensions fail (2 of 3), synthesis aborts and the roadmap is written with partial: true and an AUDIT_INCOMPLETE note per v-core-error-handling.md — it does not fabricate a ranking. The roadmap .md records data_source: estimated and 'Dimensions completed: N of M', and the ## Decisions section notes Ahrefs was unavailable.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v-discover-features --feedback=support-exports/cancellations-2026-q2.csv What should I build next for ExampleInvoicer?",
+      "expected_output": "Step 0 item 6 resolves the explicit --feedback path and dispatches Dimension D5 (Own User Feedback Signals) alongside D1-D3 (and D4 if Ahrefs available). D5 reads the CSV directly (no WebSearch needed), extracts individual feedback items (one per row, not merged across users), clusters them into feature-request themes requiring >=2 independent unique users per theme (singletons go to long_tail_mentions), computes mention_count by UNIQUE USERS not raw submission count, flags any theme where one user accounts for >50% of its submissions as dominated_by_single_user, and flags churn_correlated: true for any theme with >=1 cancellation_reason-sourced item. Step 2 merges D5 themes into the SAME feature pool as D1-D4 (semantic-match merge or standalone entry), computes demand_signal as the MAX of D2-derived and D5-derived signal (never averaged down), and overrides revenue_mechanism to retention for any churn_correlated theme regardless of what D1-D4 suggested. The roadmap records 'Own feedback source: support-exports/cancellations-2026-q2.csv', includes an 'Own user demand' line on any feature with a D5 match, and an '## Own User Feedback Themes' section for unmerged themes. A feature request that appears ONLY in the cancellation data (no competitor has it, no search volume) is NOT discarded — it appears as its own entry, potentially Novel-Bet-classified (competitor_coverage == 1, per SKILL.md's rename of this classification from Blue Ocean).",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "/v-discover-features What should I build next? (no feedback export exists anywhere in the project)",
+      "expected_output": "Step 0 item 6 auto-detects no feedback export (no explicit --feedback flag, no file matching the feedback/support-exports/*feedback*.csv conventions). The skill does NOT ask the operator to go find one and does NOT block — D5 is simply not dispatched. The roadmap records 'Own feedback source: not_provided', omits the '## Own User Feedback Themes' section entirely (no empty section printed), and proceeds normally with D1-D4 only. Treating the absence of a feedback export as a failure or a blocking question is the failure case being tested.",
+      "files": []
+    }
+  ]
+}

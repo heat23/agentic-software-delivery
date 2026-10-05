@@ -1,0 +1,23 @@
+{
+  "skill_name": "v",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/v Fix the failing Pest test for subscription checkout in this Laravel 13 + React app.",
+      "expected_output": "Resolves the user's task through the /v task-resolution path, classifies it as a bug-fix, creates an isolated worktree unless the maintenance fast-path applies, routes through TDD before implementation, runs pre-flight, produces AGENT_REVIEW and VERIFY_DONE_REPORT artifacts, and only claims completion after the completion self-check passes.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "/v Audit the current codebase for security issues, but do not edit source files.",
+      "expected_output": "Honors the explicit read-only directive, routes to the appropriate audit workflow, does not modify product source files, produces an audit/report artifact rather than implementation artifacts, and does not ask for permission to continue unless a user-only fact is genuinely missing.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/v take care of the obvious stuff in this repo",
+      "expected_output": "Treats the vague, target-less request as LOW routing-confidence rather than inventing a concrete task: interactively asks at most one clarifying AskUserQuestion to pin the workflow; in headless/noninteractive mode selects the safest deterministic route or writes a BLOCKED_${CLAUDE_SESSION_ID}.md naming the missing specifics; never fabricates scope or claims completion without a real task.",
+      "files": []
+    }
+  ]
+}
