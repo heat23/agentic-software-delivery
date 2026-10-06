@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" width="1200" height="620" role="img" aria-labelledby="t d">
   <title id="t">Agentic Software Delivery: the pipeline</title>
-  <desc id="d">AI agents take each piece of work through six stages (plan, build, test, review, verify, release), several sessions at a time in parallel waves. Audits run on demand and their findings become the next plan. A human decides what gets pushed and deployed. Underneath, an enforcement layer of hooks runs outside the model.</desc>
+  <desc id="d">AI agents take each piece of work through six stages (plan, build, test, review, verify, release), several sessions at a time in parallel waves. Audits run on demand and their findings become the next plan. Nothing is pushed or deployed without a human go-ahead. Underneath, automated checks run outside the AI.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#d97757"/>
@@ -25,7 +25,7 @@
 
   <rect x="0" y="0" width="1200" height="620" rx="18" fill="#0f172a"/>
 
-  <text x="34" y="50" class="sans kicker">PLAN → SHIP · RUN BY AGENTS · GOVERNED BY CODE · SIGNED OFF BY A HUMAN</text>
+  <text x="34" y="50" class="sans kicker">PLAN → SHIP · AI AGENTS DO THE WORK · RULES ENFORCED IN CODE</text>
 
   <!-- Stage cards: x = 34 + i * 192, width 172 -->
   <g class="sans">
@@ -94,8 +94,8 @@
   <g class="sans">
     <rect x="34" y="266" width="364" height="112" rx="12" fill="#111a2e" stroke="#334155" stroke-dasharray="4 4"/>
     <text x="54" y="296" class="title">Audit, on demand</text>
-    <text x="54" y="320" class="small">Code, security and bug hunts.</text>
-    <text x="54" y="341" class="small">Findings become the next plan.</text>
+    <text x="54" y="320" class="small">Code and security audits, plus bug hunts.</text>
+    <text x="54" y="341" class="small">What they find becomes the next plan.</text>
     <text x="54" y="364" class="mono tag">/v-audit-code · /v-bug-hunt</text>
   </g>
 
@@ -103,9 +103,9 @@
   <g class="sans">
     <rect x="418" y="266" width="364" height="112" rx="12" fill="#111a2e" stroke="#334155"/>
     <text x="438" y="296" class="title">Parallel waves</text>
-    <text x="438" y="320" class="small">Each session runs build → release,</text>
-    <text x="438" y="341" class="small">up to 5 at once. Each wave lands</text>
-    <text x="438" y="362" class="small">on main before the next one starts.</text>
+    <text x="438" y="320" class="small">Up to 5 sessions run at once, each</text>
+    <text x="438" y="341" class="small">from build to release. A wave is</text>
+    <text x="438" y="362" class="small">merged before the next one starts.</text>
   </g>
 
   <!-- Human sign-off -->
@@ -114,15 +114,15 @@
     <circle cx="840" cy="320" r="17" fill="none" stroke="#f0a284" stroke-width="2"/>
     <path d="M831,320 l6,6 l12,-13" fill="none" stroke="#f0a284" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="872" y="306" class="title">Human sign-off</text>
-    <text x="872" y="330" class="small">I decide what gets pushed</text>
-    <text x="872" y="351" class="small">and deployed.</text>
+    <text x="872" y="330" class="small">Nothing is pushed or deployed</text>
+    <text x="872" y="351" class="small">without my go-ahead.</text>
   </g>
 
   <!-- Enforcement layer -->
   <g class="sans">
     <rect x="34" y="404" width="1132" height="190" rx="14" fill="#0b1222" stroke="#d97757" stroke-dasharray="6 5" stroke-width="1.5"/>
     <text x="56" y="438" class="kicker" fill="#f0a284">ENFORCEMENT LAYER</text>
-    <text x="300" y="438" class="small">Hooks run outside the model: on commands, edits, dispatches and every attempt to finish.</text>
+    <text x="300" y="438" class="small">Checks that run outside the AI, on every command, file edit, hand-off and attempt to finish.</text>
     <g class="chip">
       <rect x="56" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
       <text x="72" y="489">Stop gate re-checks evidence</text>
