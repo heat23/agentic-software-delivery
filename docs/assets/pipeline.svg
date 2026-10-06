@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" width="1200" height="620" role="img" aria-labelledby="t d">
   <title id="t">Agentic Software Delivery: the pipeline</title>
-  <desc id="d">AI agents take each piece of work through six stages (plan, build, test, review, verify, release), several sessions at a time in parallel waves. Audits run on demand and their findings become the next plan. Nothing is pushed or deployed until a human has reviewed it. Underneath, an enforcement layer of hooks runs outside the model.</desc>
+  <desc id="d">AI agents take each piece of work through six stages (plan, build, test, review, verify, release), several sessions at a time in parallel waves. Audits run on demand and their findings become the next plan. A human decides what gets pushed and deployed. Underneath, an enforcement layer of hooks runs outside the model.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#d97757"/>
@@ -113,9 +113,9 @@
     <rect x="802" y="266" width="364" height="112" rx="12" fill="#1c1917" stroke="#d97757" stroke-width="1.5"/>
     <circle cx="840" cy="320" r="17" fill="none" stroke="#f0a284" stroke-width="2"/>
     <path d="M831,320 l6,6 l12,-13" fill="none" stroke="#f0a284" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="872" y="306" class="title">Human review &amp; sign-off</text>
-    <text x="872" y="330" class="small">Nothing is pushed or deployed</text>
-    <text x="872" y="351" class="small">until I've reviewed it.</text>
+    <text x="872" y="306" class="title">Human sign-off</text>
+    <text x="872" y="330" class="small">I decide what gets pushed</text>
+    <text x="872" y="351" class="small">and deployed.</text>
   </g>
 
   <!-- Enforcement layer -->

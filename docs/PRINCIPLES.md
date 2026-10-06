@@ -8,8 +8,9 @@ review end to end, and I review what ships.
 
 > [!IMPORTANT]
 > **The agents are told to treat the automated review layer as the only safety net.** That
-> constraint shaped everything below. In practice, nothing ships without my review and action; the
-> instruction exists so the automated layer never leans on me to catch what it missed.
+> constraint shaped everything below. In practice, I don't read most of the code the agents merge,
+> and I decide what gets pushed and deployed; the instruction exists so the automated layer never
+> leans on me to catch what it missed.
 
 Most of these rules started as softer versions that failed the same way: the instruction existed,
 the agent agreed with it, and then violated it. The fix was to replace a virtue with a check. Some

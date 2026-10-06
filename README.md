@@ -42,10 +42,10 @@ without my sign-off.
 </table>
 
 > [!IMPORTANT]
-> **Designed as if no human will review the code; operated with a person who does.** The agents are told
+> **Designed as if no human will review the code, and mostly run that way.** The agents are told
 > the automated review layer is the only safety net, so every control has to stand on its own and
-> its failures show up in the record. In practice, nothing ships without my review and action: I
-> decide what gets pushed and deployed.
+> its failures show up in the record. In practice, I don't read most of the code the agents merge.
+> I decide what gets pushed and deployed.
 
 ## How this maps to an engineering org
 
@@ -224,7 +224,7 @@ flowchart LR
     W --> LAND["Land the wave<br/>on main"]
     LAND -->|"next wave"| W
     LAND --> VER["Verify pack<br/>runs last"]
-    VER --> ME(["My review,<br/>then ship"])
+    VER --> ME(["My go-ahead,<br/>then ship"])
 ```
 
 </details>
