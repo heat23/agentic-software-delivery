@@ -59,13 +59,13 @@ from a well-run engineering team.
 | Planning and work breakdown | A planning agent turns a request into a plan, then into prompt packs grouped by shared files and dependencies |
 | Plan validation before build | The pack generator checks each pack against the code before writing it, and checks any "already done" claim against `main` |
 | Parallel teams and integration | A runner executes each wave of packs in parallel and lands it on `main` before the next wave starts |
-| Peer code review | Adversarial review panel on distinct lenses |
+| Peer code review | Adversarial review panel on distinct lenses, plus a second opinion from an OpenAI model |
 | QA sign-off | An independent QA agent that judges the *original* request |
 | Change risk classification | Risk tiers computed from the diff |
 | Release gate | The Stop gate, plus a merge-back that defers rather than overwrites |
 | Audit trail | A dispatch log (unsigned) and HMAC-signed attestation |
 | Least-privilege access | Write tools denied to gate runners; runner exemptions bound to an HMAC token |
-| FinOps | Model tiering at dispatch, plus billed-cost telemetry |
+| FinOps | [Model routing](#model-routing): the cheapest model that can do each job, plus billed-cost telemetry |
 | Operational reviews | A structured log for every session, cost and time tracing, and read-only post-mortems whose findings become the next plan or a new guard ([details](#how-the-system-measures-itself)) |
 | Postmortems | Incident → guard → test; for 8 guards, a mutation test proves the test still catches the bug |
 
@@ -342,6 +342,27 @@ flowchart LR
     M -->|yes| M1["Full gauntlet<br/>minus impact map"]
     M -->|no| F["Full gauntlet"]
 ```
+
+### Model routing
+
+Each job goes to the cheapest model that can do it well, and a `PreToolUse` hook enforces that at
+dispatch, so an instruction can't quietly change it. The risk tier above decides how many of the
+review steps run. Code changes also get a second opinion from an OpenAI model through the Codex CLI,
+so Claude isn't the only model checking Claude's work. If that review can't run, Claude reviewers
+stand in.
+
+```mermaid
+flowchart LR
+    CH(["A change"]) --> ORCH["Orchestrator plans and writes the code<br/>session model, Sonnet by default"]
+    ORCH --> GATES["Quality gates<br/>tests, lint, types, audits<br/>Haiku, the smallest model"]
+    ORCH --> REV["Review panel and specialist reviewers<br/>Sonnet, never Haiku"]
+    ORCH --> CDX["Second opinion<br/>OpenAI model via the Codex CLI"]
+    ORCH --> QA["Independent QA<br/>Sonnet"]
+    TIER{{"Risk tier from the diff"}} -.->|"decides how many review steps run"| REV
+    TOP["Top-tier model"] -.->|"only when I choose it for a session"| ORCH
+```
+
+Details: [model tiering, enforced at dispatch](ARCHITECTURE.md#6-model-tiering-enforced-at-dispatch).
 
 ## Guardrails
 
