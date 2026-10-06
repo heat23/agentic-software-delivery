@@ -108,12 +108,12 @@
     <text x="438" y="362" class="small">merged before the next one starts.</text>
   </g>
 
-  <!-- Human sign-off -->
+  <!-- My go-ahead -->
   <g class="sans">
     <rect x="802" y="266" width="364" height="112" rx="12" fill="#1c1917" stroke="#d97757" stroke-width="1.5"/>
     <circle cx="840" cy="320" r="17" fill="none" stroke="#f0a284" stroke-width="2"/>
     <path d="M831,320 l6,6 l12,-13" fill="none" stroke="#f0a284" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="872" y="306" class="title">Human sign-off</text>
+    <text x="872" y="306" class="title">My go-ahead</text>
     <text x="872" y="330" class="small">Nothing is pushed or deployed</text>
     <text x="872" y="351" class="small">without my go-ahead.</text>
   </g>
@@ -127,7 +127,7 @@
       <rect x="56" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
       <text x="72" y="489">Final check before “done”</text>
       <rect x="332" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
-      <text x="348" y="489">Tamper-evident attestation</text>
+      <text x="348" y="489">Signed attestation</text>
       <rect x="608" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
       <text x="624" y="489">Every review run logged</text>
       <rect x="884" y="456" width="260" height="54" rx="9" fill="#16213a" stroke="#334155"/>

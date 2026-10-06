@@ -112,7 +112,8 @@ proportional verification.
 
 - **Outcome:** making the orchestrator opt-in did not lower spend. Weekly orchestrator spend on
   Sonnet stayed roughly flat afterwards (about 2% higher). What the data did settle: cutting review
-  would have saved at most 2.4%, so review stayed on every code change.
+  would have saved at most 2.4%, so review stayed on every code change. Since then, I've gone back to
+  running every code change through the orchestrator.
 - **A correction along the way:** my first analysis double-counted spend. When I ran the analysis
   itself past a five-lens adversarial review panel, it caught the mistake.
 
@@ -322,8 +323,8 @@ The refute-and-majority step itself is orchestrator protocol; no hook checks it.
 
 ### Risk-proportional verification
 
-Proportionality works in two layers. Direct work is the default; the orchestrator runs for high-risk
-or large changes, for every prompt pack, and when I ask for it. Inside it, classifiers compute a tier from the actual diff:
+Every code change runs through the orchestrator. Inside it, classifiers compute a tier from the actual
+diff, and the amount of verification follows the tier:
 - **LIGHT and MEDIUM** are re-derived by the Stop gate at the end of the session.
 - **TRIVIAL** is classified at bootstrap.
 
@@ -349,7 +350,7 @@ flowchart LR
 | Guardrail | What it prevents | How it's enforced |
 |---|---|---|
 | **Stop gate** | Declaring "done" without proof | Re-validates the gate report, review and convention check, plus QA, impact-map, UX and workflow verdicts where they apply. |
-| **Tamper-evident attestation** | Skipping the gauntlet, or changing a report or the code after grading | An HMAC witness over the three reports' SHA-256 hashes and the graded source tree, keyed by a per-install `0600` secret plus the user ID. The key never appears on a command line. |
+| **Signed attestation** | Skipping the gauntlet, or changing a report or the code after grading | An HMAC witness over the three reports' SHA-256 hashes and the graded source tree, keyed by a per-install `0600` secret plus the user ID. The key never appears on a command line. |
 | **Adversarial review panel** | Rubber-stamp review | 2+ reviewers on distinct lenses, checked against the provenance log. An approval that leaves critical or high findings unresolved is rejected. |
 | **Out-of-process review** | Silent self-review | Reviewers run as separate `claude -p --agent` processes. An inline fallback is accepted only with a warning, and is blocked on high-risk reviews unless two independent reviews ran. |
 | **Model tiering** | Cheap models judging code, expensive ones on mechanical work | A `PreToolUse` hook pins gate runners to the smallest tier (Haiku) and raises 7 named review agents to the mid tier (Sonnet). |
@@ -427,7 +428,7 @@ With more time:
 | Running packs in waves and landing each wave on `main` (the header lists everything it does) | [`bin/run-v-packs`](bin/run-v-packs), [`bin/run-v-packs-lib/`](bin/run-v-packs-lib/) |
 | Pack conventions: waves, closing verification, security-bearing packs | [`v-runnable-pack-convention.md`](skills/references/v-runnable-pack-convention.md) |
 | Merging parallel work without overwriting a live session | [`skills/v-merge-all/SKILL.md`](skills/v-merge-all/SKILL.md) |
-| Tamper-evident attestation | [`v-gauntlet-attest.sh`](skills/v/references/v-gauntlet-attest.sh), [`gauntlet-witness.sh`](hooks/lib/gauntlet-witness.sh) |
+| Signed attestation | [`v-gauntlet-attest.sh`](skills/v/references/v-gauntlet-attest.sh), [`gauntlet-witness.sh`](hooks/lib/gauntlet-witness.sh) |
 | Diff-derived risk tiers | [`v-classify-light-tier.sh`](skills/v/references/v-classify-light-tier.sh), [`v-classify-medium-tier.sh`](skills/v/references/v-classify-medium-tier.sh) |
 | Out-of-process sub-agents | [`v-dispatch-subagent.sh`](skills/v/references/v-dispatch-subagent.sh) |
 | Threat model, OWASP mapping and known limits | [`docs/AI-SECURITY.md`](docs/AI-SECURITY.md) |

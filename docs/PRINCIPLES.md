@@ -20,7 +20,7 @@ evidence contract in section 2, remain instructions that reviewers check.
 
 ## 1. Act, then report, except for an ask-first list
 
-The default is autonomy. The agent makes implementation decisions (UI placement, edge cases,
+By default, the agent decides for itself. It makes implementation decisions (UI placement, edge cases,
 error handling) from established codebase patterns and reports afterwards.
 
 When the request is ambiguous, the agent resolves it in a fixed order: (1) the project's stated

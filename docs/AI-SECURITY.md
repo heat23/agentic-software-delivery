@@ -90,8 +90,9 @@ overlap most with this table:
   the session end without the evidence rather than deadlock, and logs the escape. An agent that keeps
   stopping without fixing the cause can therefore finish; the logged escape is what flags it.
   Operators can raise the limits, trading liveness back for strictness.
-- **The Stop gate covers orchestrated sessions only.** A session that never ran `/v` exits the gate
-  immediately; direct work is bound by the `PreToolUse` guards and by instruction.
+- **The Stop gate covers orchestrated sessions only.** I run every code change through `/v`, but
+  nothing enforces that. A session that never ran `/v` exits the gate immediately and is bound only by
+  the `PreToolUse` guards and by instruction.
 - **Model-asserted exits.** Some exits rest partly on the session's word, and all are documented as
   such in the code: operational commit tags, handoff and merge-deferred markers, a retry-cap handoff
   that can't be verified, and the trivial-tier marker's line and path rules. Per-gate dial variables

@@ -95,7 +95,7 @@ The exclusion is a conservative pattern heuristic. Public API routes and authori
 are not excluded by path alone.
 → [`v-classify-trivial.sh`](skills/v/references/v-classify-trivial.sh), [`v-classify-light-tier.sh`](skills/v/references/v-classify-light-tier.sh), [`v-classify-medium-tier.sh`](skills/v/references/v-classify-medium-tier.sh), [`security-path-pattern.sh`](hooks/lib/security-path-pattern.sh), [`ui-path-pattern.sh`](hooks/lib/ui-path-pattern.sh), [`v-diff-scope.sh`](hooks/lib/v-diff-scope.sh)
 
-### 2. Tamper-evident attestation
+### 2. Signed attestation
 The failure it guards against: the agent skips the gauntlet and explains why it didn't need to,
 while leftover reports from an earlier run satisfy the Stop gate. The attestation step checks that
 the three gauntlet reports (gate report, review, convention check) are fresh for this run. It then
