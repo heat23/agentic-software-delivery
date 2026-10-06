@@ -16,7 +16,7 @@ can read the code without the context it was written in. For the motivation and 
 
 The design rule connecting them: **anything the specification says that has been violated in
 practice gets moved into the enforcement layer.** The specification describes the intent, and the
-hooks enforce the parts that matter most.
+hooks enforce the most important parts.
 
 ## From plan to merged code
 
