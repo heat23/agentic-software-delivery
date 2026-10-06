@@ -60,8 +60,18 @@ kill -KILL "$G1" 2>/dev/null || true
 spawn_tree "$T/g2.pid" "$T/w2.pid"
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$T/g2.pid" ] && break; sleep 0.3; done
 G2="$(cat "$T/g2.pid" 2>/dev/null)"; W2="$(cat "$T/w2.pid" 2>/dev/null)"; _G2="$G2"
-kill -TERM -- "-$W2" 2>/dev/null; sleep 1
-if [ -n "$G2" ] && ! kill -0 "$G2" 2>/dev/null; then
+kill -TERM -- "-$W2" 2>/dev/null
+# A killed child whose parent is gone is reparented to PID 1. In a container whose PID 1 does not
+# reap (the Debian CI job), it lingers as a zombie, and `kill -0` still succeeds on a zombie. So
+# count a zombie as reaped, and poll for up to 5s instead of one fixed 1s sleep.
+_alive(){ kill -0 "$1" 2>/dev/null || return 1
+  _st=""
+  if [ -r "/proc/$1/stat" ]; then _st=$(sed -E 's/^[0-9]+ \(.*\) ([A-Za-z]).*/\1/' "/proc/$1/stat" 2>/dev/null)
+  else _st=$(ps -o stat= -p "$1" 2>/dev/null); fi
+  case "$_st" in Z*) return 1 ;; esac
+  return 0; }
+for _i in 1 2 3 4 5 6 7 8 9 10; do [ -n "$G2" ] && ! _alive "$G2" && break; sleep 0.5; done
+if [ -n "$G2" ] && ! _alive "$G2"; then
   ok "negative-pgid TERM reaps the whole tree incl. the child"
 else
   no "pgroup TERM did not reap the child" "g2=$G2 alive"
