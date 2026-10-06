@@ -1,9 +1,9 @@
 # Agentic Software Delivery
 
-**What does good engineering management look like when part of the team is AI?** This is my working
-answer: a delivery pipeline run by AI agents, where the rules that matter are enforced in code rather
-than requested in prompts, "done" needs evidence, and the system itself is measured. Nothing ships
-without my sign-off.
+**How do you get good work out of AI agents when you're the only person on the team?** This is my
+working answer. It's a delivery pipeline run by AI agents, with the key rules enforced in code and
+every session measured. Agents have to show evidence before they can call work finished, and I decide
+what gets pushed and deployed.
 
 **Sudhir Prakash**, engineering leader · [sudhirprakash.com](https://sudhirprakash.com) · I use this to build my own products.
 
@@ -22,34 +22,39 @@ without my sign-off.
   [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) take work from a plan to a
   release-ready merge, up to five sessions in parallel, directed by an orchestrator (`/v`) and 33
   workflow skills.
-- **What it shows:** how I run engineering when part of the team is AI. The rules that matter are
-  enforced in code, not requested in prompts. "Done" needs evidence. Review is independent and adversarial, including of
-  my own work: when I ran my cost analysis through a review panel, it caught me double-counting spend.
-  When the data disagreed with my design, I changed the design.
-- **The evidence:** a measured record of 645 agent sessions, drawn from a log the system writes for
-  every session, including where the controls fell short, and more than 3,200 automated checks in 252 test files, run in CI on macOS, Ubuntu and Debian. For 8
-  guards, a mutation test injects the bug the guard exists for and confirms the tests catch it.
+- **What it shows:** how I work with AI agents when there's no one else on the team. The key rules
+  are enforced in code, and agents have to show evidence before they can call work finished. Review is
+  independent and adversarial, and that includes my own work. When I ran my cost analysis past a
+  review panel, it caught me double-counting spend, and when the data disagreed with my design, I
+  changed the design.
+- **The evidence:** the system writes a log for every session, and the results below come from 645
+  of them, including the places where the controls fell short. More than 3,200 automated checks in
+  252 test files run in CI on macOS, Ubuntu and Debian. For 8 guards, a mutation test injects the bug
+  the guard exists for and confirms the tests catch it.
 - **Check it yourself:** `bash scripts/run-tests.sh` runs everything in a scratch home directory in
   about 20 minutes ([details](#run-it-about-20-minutes)).
 
 <table>
 <tr>
 <td align="center" width="25%"><h3>36%</h3>of 645 orchestrated sessions tried to finish before their checks were satisfied and were sent back at least once</td>
-<td align="center" width="25%"><h3>75%</h3>of 363 review findings survived a challenge from the other reviewers; 21% were thrown out</td>
-<td align="center" width="25%"><h3>91%</h3>of sub-agent cost was the orchestrator; review and gate runners were 1.2–2.4%. So I kept review and made the orchestrator opt-in</td>
+<td align="center" width="25%"><h3>75%</h3>of 363 review findings held up when the other reviewers challenged them, and 21% were thrown out</td>
+<td align="center" width="25%"><h3>91%</h3>of sub-agent cost went to the orchestrator, and review and gate runners took 1.2–2.4%. So I kept review and made the orchestrator opt-in</td>
 <td align="center" width="25%"><h3>3,200+</h3>automated checks, including 8 mutation guards, run in CI on 3 platforms</td>
 </tr>
 </table>
 
 > [!IMPORTANT]
-> **Designed as if no human will review the code, and mostly run that way.** The agents are told
-> the automated review layer is the only safety net, so every control has to stand on its own and
-> its failures show up in the record. In practice, I don't read most of the code the agents merge.
-> I decide what gets pushed and deployed.
+> **Built as if no one will read the code, and mostly used that way.** The agents are told the
+> automated checks are the only safety net, so each one has to work on its own, and when one fails,
+> the record shows it. In practice, I don't read most of the code the agents merge, and I decide what
+> gets pushed and deployed.
 
-## How this maps to an engineering org
+## Practices borrowed from engineering teams
 
-| Engineering-org function | Here |
+I built this for one person working with AI agents, not for a company. Each part borrows a practice
+from a well-run engineering team.
+
+| Team practice | Here |
 |---|---|
 | Planning and work breakdown | A planning agent turns a request into a plan, then into prompt packs grouped by shared files and dependencies |
 | Plan validation before build | The pack generator checks each pack against the code before writing it, and checks any "already done" claim against `main` |
@@ -79,7 +84,7 @@ without my sign-off.
 1. **Enforce, don't instruct.** A rule written in a prompt was violated by the same agent that acknowledged it, so what matters runs as a hook.
 2. **Evidence over claims.** "Done" means the required artifacts exist, validate, are fresh and match their attested hashes.
 3. **The builder doesn't grade its own work.** Reviewers run as separate processes, and a provenance log records every dispatch.
-4. **Ceremony proportional to risk.** A config tweak shouldn't pay for the full gauntlet; a payments change must.
+4. **Ceremony proportional to risk.** A config tweak shouldn't pay for the full gauntlet, but a payments change should.
 5. **Assume the agent will optimize for "done".** Design against proxy-satisfaction, and protect the guardrails themselves.
 6. **Measure the system, not just the product.** When the data disagreed with my design, I changed the design.
 7. **Every incident becomes a guard,** shipped with a test that proves it bites.
@@ -101,15 +106,15 @@ Each measure has its own window:
 | Orchestrator share of sub-agent dispatch cost | 91% |
 | Attributable reviewer and gate-runner dispatches, combined | 1.2% to 2.4%, depending on how mislabeled records are attributed. 183 unattributed dispatches (5.4%) are excluded. |
 
-The review "ceremony" was cheap; the orchestrator was the cost. So I made the orchestrator opt-in:
-it runs for high-risk or large changes and for prompt packs, and smaller ad hoc work runs direct with
+The review "ceremony" was cheap, and the orchestrator was where the cost went. So I made the
+orchestrator opt-in. It runs for high-risk or large changes and for prompt packs, and smaller ad hoc work runs direct with
 proportional verification.
 
 - **Outcome:** making the orchestrator opt-in did not lower spend. Weekly orchestrator spend on
   Sonnet stayed roughly flat afterwards (about 2% higher). What the data did settle: cutting review
   would have saved at most 2.4%, so review stayed on every code change.
-- **A correction along the way:** my first analysis double-counted spend. A five-lens adversarial
-  review panel caught it when I ran the analysis itself through one.
+- **A correction along the way:** my first analysis double-counted spend. When I ran the analysis
+  itself past a five-lens adversarial review panel, it caught the mistake.
 
 ### Review yield
 
@@ -128,19 +133,19 @@ finish, with 545 blocks in total.
 - **Caught:** the workflow-verification gate caught a UI race in which success and error
   notifications were silently dropped, and git history confirms the fix.
 - **Missed:** two other defects passed the full gauntlet and surfaced later in a retrospective sweep.
-  Passing the gates is evidence, not proof.
+  Passing the gates is good evidence, but it isn't proof.
 
 ### What these numbers don't show
 
 - **Causation:** why spend stayed flat after the orchestrator became opt-in.
 - **Gate precision:** which of the 545 blocks were justified and which were friction.
-- **Review ground truth:** "upheld" means a majority of the panel kept a finding: models judging
-  models, not a human confirming a defect.
+- **Review ground truth:** "upheld" means a majority of the panel kept a finding. That's models
+  judging models, and no person confirmed the defect.
 - **Generality:** every measurement comes from one operator's workload.
 
 ## How the system measures itself
 
-Every number in [Results](#results) comes from the system's own records, not from memory.
+Every number in [Results](#results) comes from the system's own records.
 
 - **A log for every session.** Each orchestrated session writes a structured session log: commits
   added, files changed, start and end commits, duration, turn count, model, token use by model, and
@@ -176,14 +181,14 @@ Every guard in this repository has an origin. A few of them:
 
 ## AI security
 
-The model is treated as capable but fallible, and untrusted on completion claims: the controls that
-matter run outside its reasoning, and evidence is verified rather than believed. Against the
+The model is treated as capable but fallible, and its claims that work is finished aren't taken on
+trust. The key controls run outside its reasoning, and evidence is checked before it's accepted. Against the
 [OWASP Top 10 for Agentic Applications (2026)](docs/AI-SECURITY.md#owasp-top-10-for-agentic-applications-2026),
 my self-assessed coverage is **🟢 1 Strong · 🟡 7 Partial · 🔴 2 Gap**.
 
-The limits that matter most:
-- **Same-user threat model:** the agent runs as the same OS user as the hooks, so attestation raises
-  the bar rather than building a wall.
+The biggest limits:
+- **Same-user threat model:** the agent runs as the same OS user as the hooks, so attestation makes
+  tampering harder but can't prevent it.
 - **Packs are trusted input:** the pack runner starts sessions with permission prompts bypassed, so
   whoever writes a pack can run commands as the agent.
 - **Pattern-based guards:** the live guards catch accidents, not a determined or obfuscated attempt.
@@ -392,7 +397,7 @@ scripts; [`settings.headless.json`](settings.headless.json) covers headless runn
 
 ### Read it
 
-**Evaluating how I lead (about five minutes):** [Results](#results),
+**Evaluating the approach (about five minutes):** [Results](#results),
 [How the system measures itself](#how-the-system-measures-itself),
 [Incidents that became guards](#incidents-that-became-guards), [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md)
 and the [known limits](docs/AI-SECURITY.md#known-limits).

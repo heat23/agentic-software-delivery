@@ -1,19 +1,19 @@
-# Operating Principles for Autonomous AI Coding Agents
+# Operating Principles for My AI Coding Agents
 
 [README](../README.md) · [Architecture](../ARCHITECTURE.md) · [AI security](AI-SECURITY.md) · Terms such as orchestrator, hook and gauntlet are defined in the [README](../README.md#how-it-works).
 
-These are the standing instructions my AI coding agents run under on the products I build myself.
-The setting is unusual: there's no other human on the team, so the agents plan, build, test and
-review end to end, and I review what ships.
+These are the standing instructions my AI coding agents follow on the products I build myself.
+There's no other person on the team, so the agents plan, build, test and review the work, and I
+decide what gets pushed and deployed.
 
 > [!IMPORTANT]
 > **The agents are told to treat the automated review layer as the only safety net.** That
 > constraint shaped everything below. In practice, I don't read most of the code the agents merge,
-> and I decide what gets pushed and deployed; the instruction exists so the automated layer never
-> leans on me to catch what it missed.
+> and I decide what gets pushed and deployed. The instruction is there so the automated layer never
+> counts on me to catch what it missed.
 
 Most of these rules started as softer versions that failed the same way: the instruction existed,
-the agent agreed with it, and then violated it. The fix was to replace a virtue with a check. Some
+the agent agreed with it, and then violated it. The fix was to turn each one into a check. Some
 checks run in code: the destructive-command, pull-request and dependency guards, the risk tiers,
 model tiering, and the convention scan for `TODO`s and hardcoded keys. The rest, including the
 evidence contract in section 2, remain instructions that reviewers check.

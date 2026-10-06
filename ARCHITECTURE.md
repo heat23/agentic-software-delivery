@@ -15,8 +15,8 @@ can read the code without the context it was written in. For the motivation and 
 | **Enforcement** | Shell hooks that Claude Code runs at fixed lifecycle events (before a tool call, after one, when the agent tries to stop), plus shared validators. They run outside the model's reasoning, so the agent can't simply talk its way past them. A few inputs still rest partly on the session's word; they are listed under [Known limits](docs/AI-SECURITY.md#known-limits). | [`hooks/`](hooks/), [`hooks/lib/`](hooks/lib/), and the scripts in [`skills/v/references/`](skills/v/references/) |
 
 The design rule connecting them: **anything the specification says that has been violated in
-practice gets moved into the enforcement layer.** The specification describes intent; the hooks
-make the important parts non-negotiable.
+practice gets moved into the enforcement layer.** The specification describes the intent, and the
+hooks enforce the parts that matter most.
 
 ## From plan to merged code
 

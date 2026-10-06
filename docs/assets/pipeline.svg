@@ -58,7 +58,7 @@
       <text x="16" y="28" class="num">04</text>
       <text x="16" y="58" class="stage">REVIEW</text>
       <text x="16" y="88" class="desc">Adversarial panel,</text>
-      <text x="16" y="109" class="desc">2+ distinct lenses</text>
+      <text x="16" y="109" class="desc">2+ points of view</text>
       <text x="16" y="142" class="mono tag">8 reviewers</text>
     </g>
     <g transform="translate(802,74)">
@@ -125,7 +125,7 @@
     <text x="300" y="438" class="small">Checks that run outside the AI, on every command, file edit, hand-off and attempt to finish.</text>
     <g class="chip">
       <rect x="56" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
-      <text x="72" y="489">Stop gate re-checks evidence</text>
+      <text x="72" y="489">Final check before “done”</text>
       <rect x="332" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
       <text x="348" y="489">Tamper-evident attestation</text>
       <rect x="608" y="456" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
@@ -137,7 +137,7 @@
       <rect x="332" y="522" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
       <text x="348" y="555">Destructive-command guards</text>
       <rect x="608" y="522" width="262" height="54" rx="9" fill="#16213a" stroke="#334155"/>
-      <text x="624" y="555">Guards re-tested with old bugs</text>
+      <text x="624" y="555">Guards tested against old bugs</text>
       <rect x="884" y="522" width="260" height="54" rx="9" fill="#16213a" stroke="#334155"/>
       <text x="900" y="555">Every incident → guard + test</text>
     </g>

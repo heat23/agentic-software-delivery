@@ -11,7 +11,7 @@ are listed in the [README](../README.md#guardrails).
 
 **Design stance:** treat the model as capable but fallible, and untrusted on completion claims. It
 can be wrong, it can be steered by what it reads, and it will optimize for looking finished. So the
-controls that matter run outside its reasoning, and evidence is verified rather than believed.
+key controls run outside its reasoning, and evidence is checked before it's accepted.
 
 | Element | Position |
 |---|---|
