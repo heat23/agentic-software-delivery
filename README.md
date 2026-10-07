@@ -13,7 +13,7 @@ what gets pushed and deployed.
 ![Bash and Python](https://img.shields.io/badge/stack-Bash%20%7C%20Python-informational)
 
 <p align="center">
-  <img src="docs/assets/pipeline.svg" width="100%" alt="The pipeline: AI agents take work through six stages (plan, build, test, review, verify, release) in parallel waves, with audits on demand feeding the next plan, ending in my go-ahead to push and deploy, above automated checks that run outside the AI.">
+  <img src="docs/assets/pipeline.svg" width="100%" alt="The pipeline: one command, /v, has AI agents take work through six stages (plan, build, test, review, verify, release) in parallel waves, with audits on demand feeding the next plan, ending in my go-ahead to push and deploy, above automated checks that run outside the AI.">
 </p>
 
 ## In 30 seconds
